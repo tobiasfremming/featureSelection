@@ -3,7 +3,7 @@
 module Agent
 
 
-mutable struct Expression
+struct Expression
     from::Int64
     to::Int64
 end
@@ -70,6 +70,8 @@ function calculate_number_of_disjoint_and_excess_genes(
     disjoint_genes = 0
     excess_genes = 0
 
+    # TODO: Can this be parallelized?
+    # TODO: calculate enable flag difference here instead of in genomic_distance
     for innovation in all_innovations
         in1 = haskey(genes1, innovation)
         in2 = haskey(genes2, innovation)
@@ -100,14 +102,16 @@ function genomic_distance(
     # Calculate average disabled difference
     disabled_difference = 0
     enabled_difference = 0
+    genes2 = Dict(gene.innovation => gene for gene in chromosome2.genes)
+
     for gene1 in chromosome1.genes
-        for gene2 in chromosome2.genes
-            if gene1.innovation == gene2.innovation
-                different = gene1.enabled != gene2.enabled
-                disabled_difference += different
-                enabled_difference += !different
-                break
-            end
+        if haskey(genes2, gene1.innovation)
+            gene2 = genes2[gene1.innovation]
+            difference = gene1.enabled != gene2.enabled
+                disabled_difference += difference
+                enabled_difference += !difference
+                
+            
         end
     end
     
@@ -125,9 +129,9 @@ function fitness_sharing!(
     c3::Float64, 
     delta_t::Float64
     )
-    for i in 1:length(population)
+    Threads.@threads for i in 1:length(population)
         s = 0.0
-        for j in 1:length(population)
+        @inbounds for j in 1:length(population)
             δ = genomic_distance(population[i], population[j], c1, c2, c3)
             if δ < delta_t
                 s += 1.0 - (δ / delta_t)
@@ -197,7 +201,7 @@ end
 function create_random_chromosome(num_genes::Int64, from::Int64, to::Int64)
     genes = Gene[]
     for i in 1:num_genes
-        if (rand(0:1) == 0) # 50% chance of creating a gene
+        if rand(Bool) # 50% chance of creating a gene
             continue
         end
         gene = create_gene(true, from, to) 
