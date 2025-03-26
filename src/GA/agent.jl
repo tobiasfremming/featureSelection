@@ -16,13 +16,19 @@ end
 
 
 #  resetting the list every generation as opposed to keeping a growing list of mutations throughout evolution is sufficient to prevent an explosion of innovation numbers. 
-global innovations = Dict{int, Expression}()
+global innovations = Dict{Expression, Int64}()
 
 mutable struct Chromosome
     genes::Vector{Gene}
     fitness::Float64
     adjusted_fitness::Float64
 end
+
+mutable struct Species
+    representative::Chromosome
+    members::Vector{Chromosome}
+end
+
 
 function get_highest_and_lowest_innovation_number(chromosome::Chromosome)
     highest::Int64 = -1
@@ -72,7 +78,7 @@ end
 
 
 
-function genomic_distance(chromosome1::Chromosome, chromosome1::Chromosome, c1::Float64, c2::Float64, c3::Float64)
+function genomic_distance(chromosome1::Chromosome, chromosome2::Chromosome, c1::Float64, c2::Float64, c3::Float64)
     min, max = get_innovation_range(chromosome1, chromosome2)
     disjoint, excess = calculate_number_of_disjoint_and_excess_genes(min, max, chromosome1, chromosome2)
 
@@ -90,12 +96,64 @@ function genomic_distance(chromosome1::Chromosome, chromosome1::Chromosome, c1::
         end
     end
     
-    W = Float64(disabled_difference) / Float64(enabled_difference + 0.0000001) # avoid division by zero
+    enabled_flag_diff_ratio::Float64 = Float64(disabled_difference) / Float64(enabled_difference + 1e-7)
     N = max(min(length(chromosome1.genes), length(chromosome2.genes)), 1)
-    return c1 * excess / N + c2 * disjoint / N + c3 * W
+    return c1 * excess / N + c2 * disjoint / N + c3 * enabled_flag_diff_ratio # TODO: Should i skip W, as I dont have weights and this is not part of the original NEAT paper?
 
+end
 
+function fitness_sharing!(population::Vector{Chromosome}, c1::Float64, c2::Float64, c3::Float64, delta_t::Float64)
+    for i in 1:length(population)
+        s = 0.0
+        for j in 1:length(population)
+            δ = genomic_distance(population[i], population[j], c1, c2, c3)
+            if δ < delta_t
+                s += 1.0 - (δ / delta_t)
+            end
+        end
+        if s > 0
+            population[i].adjusted_fitness = population[i].fitness / s
+        else
+            population[i].adjusted_fitness = population[i].fitness
+        end
+    end
+end
 
+function assign_species(population::Vector{Chromosome}, c1::Float64, c2::Float64, c3::Float64, delta_t::Float64)
+    species_list = Species[]  # all species
+    
+    for chrom in population
+        assigned = false
+
+        for sp in species_list
+            δ = genomic_distance(chrom, sp.representative, c1, c2, c3)
+            if δ < delta_t
+                push!(sp.members, chrom)
+                assigned = true
+                break
+            end
+        end
+
+        if !assigned
+            push!(species_list, Species(chrom, [chrom]))
+        end
+    end
+
+    # Update representatives for each species
+    for sp in species_list
+        sp.representative = rand(sp.members)
+    end
+
+    return species_list
+end
+
+#TODO: Keep track of species stagnation: if a species doesn’t improve for N generations, kill it off.
+# TODO: maybe: Track the best genome per species, for elitism and representative updates.
+
+function speciate_and_fitness_sharing!(population::Vector{Chromosome}, c1::Float64, c2::Float64, c3::Float64, delta_t::Float64)
+    species_list = assign_species(population, c1, c2, c3, delta_t)
+    fitness_sharing!(population, c1, c2, c3, delta_t)
+    return species_list
 end
 
 
