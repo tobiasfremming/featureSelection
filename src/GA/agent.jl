@@ -1,8 +1,6 @@
 
 
 module Agent
-#  resetting the list every generation as opposed to keeping a growing list of mutations throughout evolution is sufficient to prevent an explosion of innovation numbers. 
-
 
 
 mutable struct Expression
@@ -17,6 +15,7 @@ mutable struct Gene
 end
 
 
+#  resetting the list every generation as opposed to keeping a growing list of mutations throughout evolution is sufficient to prevent an explosion of innovation numbers. 
 global innovations = Dict{int, Expression}()
 
 mutable struct Chromosome
@@ -25,15 +24,108 @@ mutable struct Chromosome
     adjusted_fitness::Float64
 end
 
+function get_highest_and_lowest_innovation_number(chromosome::Chromosome)
+    highest::Int64 = -1
+    lowest::Int64 = 100000
+    for gene::Gene in chromosome.genes
+        if (gene.innovation > highest)
+            highest = gene.innovation
+        end
+        if (gene.innovation < lowest)
+            lowest = gene.innovation
+        end
+    end
+    return (highest, lowest)
+end
 
-function create_random_Expression(start::Int64, stop::Int64)
+function get_innovation_range(chromosome1::Chromosome, chromosome2::Chromosome)
+    min1, max1 = get_highest_and_lowest_innovation_number(chromosome1)
+    min2, max2 = get_highest_and_lowest_innovation_number(chromosome2)
+    return (max(min1, min2), min(max1, max2))
+end
+
+function calculate_number_of_disjoint_and_excess_genes(min::Int64, max::Int64, chromosome1::Chromosome, chromosome2::Chromosome)
+    # Collect innovation numbers
+    genes1 = Dict(gene.innovation => gene for gene in chromosome1.genes)
+    genes2 = Dict(gene.innovation => gene for gene in chromosome2.genes)
+
+    all_innovations = union(keys(genes1), keys(genes2))
+
+    disjoint_genes = 0
+    excess_genes = 0
+
+    for innovation in all_innovations
+        in1 = haskey(genes1, innovation)
+        in2 = haskey(genes2, innovation)
+
+        if xor(in1, in2)  # gene only exists in one chromosome
+            if innovation < min || innovation > max
+                excess_genes += 1
+            else
+                disjoint_genes += 1
+            end
+        end
+    end
+
+    return (disjoint_genes, excess_genes)
+end
+
+
+
+function genomic_distance(chromosome1::Chromosome, chromosome1::Chromosome, c1::Float64, c2::Float64, c3::Float64)
+    min, max = get_innovation_range(chromosome1, chromosome2)
+    disjoint, excess = calculate_number_of_disjoint_and_excess_genes(min, max, chromosome1, chromosome2)
+
+    # Calculate average disabled difference
+    disabled_difference = 0
+    enabled_difference = 0
+    for gene1 in chromosome1.genes
+        for gene2 in chromosome2.genes
+            if gene1.innovation == gene2.innovation
+                different = gene1.enabled != gene2.enabled
+                disabled_difference += different
+                enabled_difference += !different
+                break
+            end
+        end
+    end
+    
+    W = Float64(disabled_difference) / Float64(enabled_difference + 0.0000001) # avoid division by zero
+    N = max(min(length(chromosome1.genes), length(chromosome2.genes)), 1)
+    return c1 * excess / N + c2 * disjoint / N + c3 * W
+
+
+
+end
+
+
+function create_random_chromosome(num_genes::Int64, from::Int64, to::Int64)
+    genes = Gene[]
+    for i in 1:num_genes
+        if (rand(0:1) == 0) # 50% chance of creating a gene
+            continue
+        end
+        gene = create_gene(true, from, to) 
+        push!(genes, gene)
+    end
+    return Chromosome(genes, 0.0, 0.0)
+end
+
+function create_expression_from_start(start::Int64, stop::Int64)
+    to = rand(start:stop)
+    return Expression(start, to)
+end
+
+
+function create_random_expression(start::Int64, stop::Int64)
     from = rand(start:stop)
     to = rand(start:stop)
     return Expression(from, to)
 end
 
+
 function create_gene(enabled::Bool, from::Int64, to::Int64)
-    expression = create_random_Expression(from, to)
+    expression = create_random_expression(from, to)
     if (haskey(innovations, expression))
         innovation = innovations[expression]
     else
