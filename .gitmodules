@@ -1,0 +1,3 @@
+[submodule "training/Modules"]
+	path = training/Modules
+	url = git@github.com:tranjamin/machine-learning.git
