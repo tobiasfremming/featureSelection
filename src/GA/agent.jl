@@ -12,6 +12,8 @@ end
 mutable struct Gene
     innovation::Int64
     expression::Expression
+    weight::Float64 # weight of the expression. Between -1 and 1. Higher weights mean higher chance of activation for incoming bit
+    bias::Float64 # threshhold for activation (bit getting turned on) for outgoing bit
     enabled::Bool
 end
 
@@ -104,16 +106,18 @@ function genomic_distance(
     enabled_difference = 0
     genes2 = Dict(gene.innovation => gene for gene in chromosome2.genes)
 
-    for gene1 in chromosome1.genes
-        if haskey(genes2, gene1.innovation)
-            gene2 = genes2[gene1.innovation]
-            difference = gene1.enabled != gene2.enabled
-                disabled_difference += difference
-                enabled_difference += !difference
+
+    # TODO: use weights instead of enabled flag, maybe run this in another loop.
+    # for gene1 in chromosome1.genes
+    #     if haskey(genes2, gene1.innovation)
+    #         gene2 = genes2[gene1.innovation]
+    #         difference = gene1.enabled != gene2.enabled
+    #             disabled_difference += difference
+    #             enabled_difference += !difference
                 
             
-        end
-    end
+    #     end
+    # end
     
     enabled_flag_diff_ratio::Float64 = Float64(disabled_difference) / Float64(enabled_difference + 1e-7)
     N = max(min(length(chromosome1.genes), length(chromosome2.genes)), 1)
@@ -226,6 +230,9 @@ end
 
 function create_gene(enabled::Bool, from::Int64, to::Int64)
     expression = create_random_expression(from, to)
+    # weight and bias are random between -1 and 1
+    weight = 2 * rand() - 1
+    bias = 2 * rand() - 1
     if (haskey(innovations, expression))
         innovation = innovations[expression]
     else
@@ -233,7 +240,7 @@ function create_gene(enabled::Bool, from::Int64, to::Int64)
         innovations[expression] = innovation
     end
 
-    return Gene(innovation, expression, enabled)
+    return Gene(innovation, expression, weight, bias, enabled)
 end
 
 
