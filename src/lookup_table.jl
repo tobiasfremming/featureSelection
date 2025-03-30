@@ -12,6 +12,8 @@ mutable struct LookupTable
     table::Dict{String, Float64}
 end
 
+function Base.getindex(self::LookupTable, ind) return self.table[ind] end
+
 """
     create()
 
@@ -56,7 +58,7 @@ end
 Load a lookup table from disk using Python's pickle.
 """
 function load(path::String)
-    open(path, "rb") do f
+    open(path, "r") do f
         py_dict = pickle.load(f)
         # Convert back to Julia Dict
         julia_dict = Dict{String, Float64}()
