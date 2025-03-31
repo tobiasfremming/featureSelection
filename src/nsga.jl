@@ -5,17 +5,23 @@ using Plots
 include("lookup_table.jl")
 using .LookupTableModule
 
-DATASET = "heart"
+DATASET = "wine"
 ERROR_TABLE = LookupTableModule.load("../luts/$(DATASET)_err.pickle")
 PEN_TABLE = LookupTableModule.load("../luts/$(DATASET)_pen.pickle")
 
 POP_SIZE = 50
 NUM_PARENTS = 50
 NUM_ITERATIONS = 100
-GENE_SIZE = length(collect(keys(ERROR_TABLE.table))[1])
+GENE_SIZE = length(collect(keys(ERROR_TABLE))[1])
 
-ERROR_TABLE.table[string(join(Vector{Int}([0 for _ in 1:GENE_SIZE])))] = 100
-PEN_TABLE.table[string(join(Vector{Int}([0 for _ in 1:GENE_SIZE])))] = 100
+# remove zero index
+ZERO_KEY = string(join(Vector{Int}([0 for _ in 1:GENE_SIZE])))
+if haskey(ERROR_TABLE, ZERO_KEY)
+    delete!(ERROR_TABLE, ZERO_KEY)
+end
+if haskey(PEN_TABLE, ZERO_KEY)
+    delete!(PEN_TABLE, ZERO_KEY)
+end
 
 function onePointCrossover!(population::Array{BitVector}, prob::Float64)
     """
@@ -172,11 +178,11 @@ function initialisePopulation(nsize::Int64)::Array{BitVector}
 end
 
 function evaluate_fitness_one(population)::Array{Float64}
-    return map(x -> ERROR_TABLE[string(join(Vector{Int}(x)))], population)
+    return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? Inf : ERROR_TABLE[string(join(Vector{Int}(x)))], population)
 end
 
 function evaluate_fitness_two(population)::Array{Float64}
-    return map(x -> PEN_TABLE[string(join(Vector{Int}(x)))], population)
+    return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? Inf : PEN_TABLE[string(join(Vector{Int}(x)))], population)
 end
 
 function parentSelectionNSGA(population::Vector, nparents::Int)::Array
@@ -238,6 +244,9 @@ function main()
 
     population::Array{BitVector} = initialisePopulation(POP_SIZE)
 
+    all_points_err = collect(values(ERROR_TABLE))
+    all_points_pen = collect(values(PEN_TABLE))
+
     for i in 1:NUM_ITERATIONS
         new_fitness_one = evaluate_fitness_one(population)
         new_fitness_two = evaluate_fitness_two(population)
@@ -248,11 +257,21 @@ function main()
         print("Genotypic Diversity $(round(mean([sum(x .!= y) for x in population, y in population]), digits=3)) | ")
         println()
 
+        
         plot(
+            all_points_err, all_points_pen,
+            seriestype=:scatter,
+            color=:gray,
+            alpha=0.3,
+            label="Entire Table",
+            legend=:topright
+        )
+        plot!(
             new_fitness_one, new_fitness_two, 
             seriestype=:scatter,
             color=:viridis,
-            marker_z=get_population_ranks(new_fitness_one, new_fitness_two)
+            marker_z=get_population_ranks(new_fitness_one, new_fitness_two),
+            label="Population"
         )
         savefig("out/landscape_$(i).png")
 
