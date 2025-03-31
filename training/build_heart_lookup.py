@@ -46,6 +46,8 @@ for i in range(1, 2**len(train_x.columns)):
     results[bin(i)[2:].zfill(len(train_x.columns))] = score
 
     penalty = np.sum(np.abs(list(model.get_coefficients().values())))
+    penalty = len(train_x.columns)
+    
     penalties[bin(i)[2:].zfill(len(train_x.columns))] = penalty
     
     totals[bin(i)[2:].zfill(len(train_x.columns))] = LAMBDA*penalty + score
