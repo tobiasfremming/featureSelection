@@ -5,6 +5,8 @@ using Plots
 include("lookup_table.jl")
 using .LookupTableModule
 
+include("GA/mutate.jl")
+
 DATASET = "wine"
 ERROR_TABLE = LookupTableModule.load("../luts/$(DATASET)_err.pickle")
 PEN_TABLE = LookupTableModule.load("../luts/$(DATASET)_pen.pickle")
@@ -30,7 +32,7 @@ function onePointCrossover!(population::Array{BitVector}, prob::Float64)
 
     Parameters:
         population::Array{BitVector} the array of children to crossover. Should have an even length.
-        prob::Float32 the probability of applying the crossover.
+        prob::Float64 the probability of applying the crossover.
     """
     for i in 1:Int32((floor(length(population)/2)))
         parent1 = population[2*i]
@@ -52,7 +54,7 @@ function uniformCrossover!(population::Array{BitVector}, prob::Float64)
     
     Parameters:
         population::Array{BitVector} the array of children to crossover. Should have an even length.
-        prob::Float32 the probability of applying the crossover.
+        prob::Float64 the probability of applying the crossover.
     """
     for i in 1:Int32((floor(length(population)/2)))
         if rand() < prob
@@ -65,23 +67,6 @@ function uniformCrossover!(population::Array{BitVector}, prob::Float64)
                     parent2[i] = temp
                 end
             end     
-        end
-    end
-end
-
-function applyMutationStandard!(population_to_mutate::Array{BitVector}, bitwiseProb::Float64)
-    """
-    Applies standard mutation
-
-    Parameters:
-        population_to_mutate::Array{BitVector} the population to apply mutation to
-        bitwiseProb::Float32 the bitwise probability of mutation being applied
-    """
-    for person in population_to_mutate
-        for i in 1:length(population_to_mutate[1])
-            if rand() < bitwiseProb
-                person[i] = 1 - person[i]
-            end
         end
     end
 end
@@ -278,7 +263,7 @@ function main()
         parents = parentSelectionNSGA(population, NUM_PARENTS)
         children::Array{BitVector} = deepcopy(parents)
         uniformCrossover!(children, 0.6)
-        applyMutationStandard!(children, 1/30)
+        Mutations.applyMutationStandard!(children, 1/30)
 
         population = survivorSelectionNSGA(parents, children)
     end
