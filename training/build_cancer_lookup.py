@@ -48,7 +48,7 @@ for i in range(1, 2**len(data_x.columns)):
     results[bin(i)[2:].zfill(len(data_x.columns))] = score
 
     penalty = np.sum(np.abs(list(model.get_coefficients().values())))
-    penalty = len(train_x.columns)
+    penalty = sum(bitmask)
     
     penalties[bin(i)[2:].zfill(len(data_x.columns))] = penalty
     
