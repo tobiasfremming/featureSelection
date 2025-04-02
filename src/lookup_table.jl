@@ -1,6 +1,3 @@
-using Pkg
-Pkg.add("PyCall")
-
 module LookupTableModule
 
 using PyCall
@@ -11,6 +8,13 @@ pickle = pyimport("pickle")
 mutable struct LookupTable
     table::Dict{String, Float64}
 end
+
+function Base.getindex(self::LookupTable, ind) return self.table[ind] end
+function Base.setindex!(self::LookupTable, ele, ind) setindex!(self.table, ele, ind) end
+function Base.keys(self::LookupTable) return keys(self.table) end
+function Base.values(self::LookupTable) return values(self.table) end
+function Base.haskey(self::LookupTable, key) return haskey(self.table, key) end
+function Base.delete!(self::LookupTable, key) delete!(self.table, key) end
 
 """
     create()
@@ -56,7 +60,7 @@ end
 Load a lookup table from disk using Python's pickle.
 """
 function load(path::String)
-    open(path, "rb") do f
+    open(path, "r") do f
         py_dict = pickle.load(f)
         # Convert back to Julia Dict
         julia_dict = Dict{String, Float64}()

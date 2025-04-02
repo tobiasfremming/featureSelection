@@ -11,7 +11,7 @@ from sklearn.metrics import accuracy_score
 
 LAMBDA = 0.3
 
-df = pd.read_csv("../data_sets/breast-cancer.data")
+df = pd.read_csv("../data_sets/wine.data")
 data = DataManager.Data(df)
 
 data.make_categorical("Class")
@@ -56,9 +56,9 @@ for i in range(1, 2**len(data_x.columns)):
 
     print(f"Model {i}: Misclass: {score} | Eval time: {time.time() - stime} seconds")
 
-pd.to_pickle(totals, "../luts/cancer.pickle")
-pd.DataFrame(totals.items()).to_csv("../luts/cancer.csv", index=False, header=False)
-pd.to_pickle(results, "../luts/cancer_err.pickle")
-pd.DataFrame(results.items()).to_csv("../luts/cancer_err.csv", index=False, header=False)
-pd.to_pickle(penalties, "../luts/cancer_pen.pickle")
-pd.DataFrame(penalties.items()).to_csv("../luts/cancer_pen.csv", index=False, header=False)
+pd.to_pickle(totals, "../luts/wine.pickle")
+pd.DataFrame(totals.items()).to_csv("../luts/wine.csv", index=False, header=False)
+pd.to_pickle(results, "../luts/wine_err.pickle")
+pd.DataFrame(results.items()).to_csv("../luts/wine_err.csv", index=False, header=False)
+pd.to_pickle(penalties, "../luts/wine_pen.pickle")
+pd.DataFrame(penalties.items()).to_csv("../luts/wine_pen.csv", index=False, header=False)
