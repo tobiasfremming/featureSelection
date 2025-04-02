@@ -7,17 +7,19 @@ using .LookupTableModule
 
 include("GA/mutate.jl")
 
-DATASET = "wine"
-ERROR_TABLE = LookupTableModule.load("../luts/$(DATASET)_err.pickle")
-PEN_TABLE = LookupTableModule.load("../luts/$(DATASET)_pen.pickle")
+DATASET::String = ARGS[1]
+ERROR_TABLE::LookupTableModule.LookupTable = LookupTableModule.load("../luts/$(DATASET)_err.pickle")
+PEN_TABLE::LookupTableModule.LookupTable = LookupTableModule.load("../luts/$(DATASET)_pen.pickle")
 
-POP_SIZE = 50
-NUM_PARENTS = 50
+POP_SIZE = 200
+NUM_PARENTS = 200
 NUM_ITERATIONS = 100
 GENE_SIZE = length(collect(keys(ERROR_TABLE))[1])
+MUTATION_RATE::Float64 = 2/(GENE_SIZE + NUM_PARENTS) * 1.0
+CROSSOVER_RATE::Float64 = 0.7
 
-# remove zero index
-ZERO_KEY = string(join(Vector{Int}([0 for _ in 1:GENE_SIZE])))
+# remove zero index of the table
+ZERO_KEY::String = string(join(Vector{Int}([0 for _ in 1:GENE_SIZE])))
 if haskey(ERROR_TABLE, ZERO_KEY)
     delete!(ERROR_TABLE, ZERO_KEY)
 end
@@ -25,13 +27,17 @@ if haskey(PEN_TABLE, ZERO_KEY)
     delete!(PEN_TABLE, ZERO_KEY)
 end
 
-function onePointCrossover!(population::Array{BitVector}, prob::Float64)
+# set the penalty of the zero index to be the maximum
+ZERO_VALUE_F1::Float64 = maximum(map(x -> ERROR_TABLE[x], collect(keys(ERROR_TABLE)))) + 1
+ZERO_VALUE_F2::Float64 = maximum(map(x -> PEN_TABLE[x], collect(keys(PEN_TABLE)))) + 1
+
+function onePointCrossover!(population::Vector{BitVector}, prob::Float64)
     """
     Applies standard one-point crossover within contiguous pairs of children. Splits two genotypes into two partitions and matches opposite partitions for every (contiguous) pair of children.
     Operations are in-place.
 
     Parameters:
-        population::Array{BitVector} the array of children to crossover. Should have an even length.
+        population::Vector{BitVector} the Vector of children to crossover. Should have an even length.
         prob::Float64 the probability of applying the crossover.
     """
     for i in 1:Int32((floor(length(population)/2)))
@@ -48,12 +54,12 @@ function onePointCrossover!(population::Array{BitVector}, prob::Float64)
     end
 end
 
-function uniformCrossover!(population::Array{BitVector}, prob::Float64)
+function uniformCrossover!(population::Vector{BitVector}, prob::Float64)
     """
     Applies uniform crossover within contiguous pairs of children.
     
     Parameters:
-        population::Array{BitVector} the array of children to crossover. Should have an even length.
+        population::Vector{BitVector} the Vector of children to crossover. Should have an even length.
         prob::Float64 the probability of applying the crossover.
     """
     for i in 1:Int32((floor(length(population)/2)))
@@ -71,7 +77,7 @@ function uniformCrossover!(population::Array{BitVector}, prob::Float64)
     end
 end
 
-function get_population_ranks(fitness_one::Array{Float64}, fitness_two::Array{Float64})
+function get_population_ranks(fitness_one::Vector{Float64}, fitness_two::Vector{Float64})
     N = length(fitness_one)
     population_ranks = fill(1, N)
 
@@ -96,7 +102,7 @@ function get_population_ranks(fitness_one::Array{Float64}, fitness_two::Array{Fl
     return population_ranks
 end
 
-function get_population_crowdings(fitness_one::Array{Float64}, fitness_two::Array{Float64}, ranks)
+function get_population_crowdings(fitness_one::Vector{Float64}, fitness_two::Vector{Float64}, ranks)
     crowdings = fill(0.0, length(ranks))
 
     # do crowding rank-wise
@@ -146,14 +152,14 @@ function get_population_crowdings(fitness_one::Array{Float64}, fitness_two::Arra
     return crowdings
 end
 
-function initialisePopulation(nsize::Int64)::Array{BitVector}
+function initialisePopulation(nsize::Int64)::Vector{BitVector}
     """
     Creates a random and uniform population
 
     Parameters:
         nsize::Int64 the size of the population
     """
-    population::Array{BitVector} = Array{BitVector}(undef, nsize)
+    population::Vector{BitVector} = Vector{BitVector}(undef, nsize)
     for i in 1:nsize
         person = bitrand(GENE_SIZE)
         population[i] = person
@@ -162,28 +168,28 @@ function initialisePopulation(nsize::Int64)::Array{BitVector}
     return population
 end
 
-function evaluate_fitness_one(population)::Array{Float64}
-    return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? Inf : ERROR_TABLE[string(join(Vector{Int}(x)))], population)
+function evaluate_fitness_one(population)::Vector{Float64}
+    return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? ZERO_VALUE_F1 : ERROR_TABLE[string(join(Vector{Int}(x)))], population)
 end
 
-function evaluate_fitness_two(population)::Array{Float64}
-    return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? Inf : PEN_TABLE[string(join(Vector{Int}(x)))], population)
+function evaluate_fitness_two(population)::Vector{Float64}
+    return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? ZERO_VALUE_F2 : PEN_TABLE[string(join(Vector{Int}(x)))], population)
 end
 
-function parentSelectionNSGA(population::Vector, nparents::Int)::Array
+function parentSelectionNSGA(population::Vector, nparents::Int)::Vector
     """
     Uses a binary tournament
     """
-    new_population::Array = Vector(undef, nparents)
+    new_population::Vector = Vector(undef, nparents)
 
-    fitness_one = evaluate_fitness_one(population)
-    fitness_two = evaluate_fitness_two(population)
-    old_pareto_ranks::Array{Int} = get_population_ranks(fitness_one, fitness_two)
-    old_crowding_distances::Array{Float64} = get_population_crowdings(fitness_one, fitness_two, old_pareto_ranks)
+    fitness_one::Vector{Float64} = evaluate_fitness_one(population)
+    fitness_two::Vector{Float64} = evaluate_fitness_two(population)
+    old_pareto_ranks::Vector{Int} = get_population_ranks(fitness_one, fitness_two)
+    old_crowding_distances::Vector{Float64} = get_population_crowdings(fitness_one, fitness_two, old_pareto_ranks)
     
     for i in 1:nparents
         # choose two random members
-        option_one, option_two = sample(1:length(population), 2, replace=false)
+        option_one::Int, option_two::Int = sample(1:length(population), 2, replace=false)
 
         if old_pareto_ranks[option_one] < old_pareto_ranks[option_two]
             new_population[i] = deepcopy(population[option_one])
@@ -197,20 +203,20 @@ function parentSelectionNSGA(population::Vector, nparents::Int)::Array
     return new_population
 end
 
-function survivorSelectionNSGA(parents::Array, children::Array)::Array
-    N = length(parents)
-    total_population = vcat(parents, children)
-    fitness_one = evaluate_fitness_one(total_population)
-    fitness_two = evaluate_fitness_two(total_population)
+function survivorSelectionNSGA(parents::Vector, children::Vector)::Vector
+    N::Int = length(parents)
+    total_population::Vector = vcat(parents, children)
+    fitness_one::Vector{Float64} = evaluate_fitness_one(total_population)
+    fitness_two::Vector{Float64} = evaluate_fitness_two(total_population)
 
-    total_ranks = get_population_ranks(fitness_one, fitness_two)
-    total_crowdings = get_population_crowdings(fitness_one, fitness_two, total_ranks)
+    total_ranks::Vector{Int} = get_population_ranks(fitness_one, fitness_two)
+    total_crowdings::Vector{Float64} = get_population_crowdings(fitness_one, fitness_two, total_ranks)
 
-    output_population = []
+    output_population::Vector = []
 
-    rank = 1
+    rank::Int = 1
     while rank <= maximum(total_ranks)
-        next_front = findall(x -> x == rank, total_ranks)
+        next_front::Vector{Int} = findall(x -> x == rank, total_ranks)
         if length(output_population) + length(next_front) <= N
             append!(output_population, total_population[next_front])
         else
@@ -227,19 +233,24 @@ end
 
 function main()
 
-    population::Array{BitVector} = initialisePopulation(POP_SIZE)
+    population::Vector{BitVector} = initialisePopulation(POP_SIZE)
 
-    all_points_err = collect(values(ERROR_TABLE))
-    all_points_pen = collect(values(PEN_TABLE))
+    all_points_err::Vector{Float64} = collect(values(ERROR_TABLE))
+    all_points_pen::Vector{Float64} = collect(values(PEN_TABLE))
+    total_population = [digits(i, base=2, pad=GENE_SIZE) for i in 1:2^(GENE_SIZE)]
+    total_pareto_front::Vector = total_population[findall(x -> x == 1, get_population_ranks(all_points_err, all_points_pen))]
+
 
     for i in 1:NUM_ITERATIONS
-        new_fitness_one = evaluate_fitness_one(population)
-        new_fitness_two = evaluate_fitness_two(population)
+        new_fitness_one::Vector{Float64} = evaluate_fitness_one(population)
+        new_fitness_two::Vector{Float64} = evaluate_fitness_two(population)
 
         print("Generation $(i) | ")
-        print("FitnessOne $(round(mean(new_fitness_one), digits=3)) [$(round(minimum(new_fitness_one), digits=3)) - $(round(maximum(new_fitness_one), digits=3))] [+/- $(round(std(new_fitness_one), digits=3))] | ")
-        print("FitnessTwo $(round(mean(new_fitness_two), digits=3)) [$(round(minimum(new_fitness_two), digits=3)) - $(round(maximum(new_fitness_two), digits=3))] [+/- $(round(std(new_fitness_two), digits=3))] | ")
-        print("Genotypic Diversity $(round(mean([sum(x .!= y) for x in population, y in population]), digits=3)) | ")
+        print("F1 $(round(mean(new_fitness_one), digits=3)) [$(round(minimum(new_fitness_one), digits=3)) - $(round(maximum(new_fitness_one), digits=3))] [+/- $(round(std(new_fitness_one), digits=3))] | ")
+        print("F2 $(round(mean(new_fitness_two), digits=3)) [$(round(minimum(new_fitness_two), digits=3)) - $(round(maximum(new_fitness_two), digits=3))] [+/- $(round(std(new_fitness_two), digits=3))] | ")
+        print("G Div $(round(mean([sum(x .!= y) for x in population, y in population]), digits=3)) | ")
+        print("% of Front $(length(setdiff(total_pareto_front, population))/length(total_pareto_front)*100) | ")
+        print("% of Dominated Solns $(length(setdiff(population, total_pareto_front))/length(population)*100)")
         println()
 
         
@@ -247,7 +258,7 @@ function main()
             all_points_err, all_points_pen,
             seriestype=:scatter,
             color=:gray,
-            alpha=0.3,
+            alpha=0.1,
             label="Entire Table",
             legend=:topright
         )
@@ -260,10 +271,19 @@ function main()
         )
         savefig("out/landscape_$(i).png")
 
-        parents = parentSelectionNSGA(population, NUM_PARENTS)
-        children::Array{BitVector} = deepcopy(parents)
-        uniformCrossover!(children, 0.6)
-        Mutations.applyMutationStandard!(children, 1/30)
+        plot(
+            new_fitness_one, new_fitness_two, 
+            seriestype=:scatter,
+            color=:viridis,
+            marker_z=get_population_ranks(new_fitness_one, new_fitness_two),
+            label="Population"
+        )
+        savefig("out/landscapeonly_$(i).png")
+
+        parents::Vector = parentSelectionNSGA(population, NUM_PARENTS)
+        children::Vector{BitVector} = deepcopy(parents)
+        uniformCrossover!(children, CROSSOVER_RATE)
+        Mutations.applyMutationStandard!(children, MUTATION_RATE)
 
         population = survivorSelectionNSGA(parents, children)
     end
