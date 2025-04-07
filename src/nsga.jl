@@ -31,6 +31,21 @@ end
 ZERO_VALUE_F1::Float64 = maximum(map(x -> ERROR_TABLE[x], collect(keys(ERROR_TABLE)))) + 1
 ZERO_VALUE_F2::Float64 = maximum(map(x -> PEN_TABLE[x], collect(keys(PEN_TABLE)))) + 1
 
+function hypervolume(pareto_front, reference_point)
+    # Sort points by the first objective (minimization assumed)
+    sorted_front = sort(pareto_front, by=x -> x[1], rev=true)
+
+    hv = 0.0
+    prev_x = reference_point[1]
+
+    for (x, y) in sorted_front
+        hv += (reference_point[2] - y) * (prev_x - x)
+        prev_x = x
+    end
+
+    return hv
+end
+
 function onePointCrossover!(population::Vector{BitVector}, prob::Float64)
     """
     Applies standard one-point crossover within contiguous pairs of children. Splits two genotypes into two partitions and matches opposite partitions for every (contiguous) pair of children.
@@ -230,30 +245,64 @@ function survivorSelectionNSGA(parents::Vector, children::Vector)::Vector
     return deepcopy(output_population)
 end
 
+mutable struct Statistics
+    f2_mean::Vector{Float64}
+    f2_std::Vector{Float64}
+    f2_min::Vector{Float64}
+    f2_max::Vector{Float64}
+    f1_mean::Vector{Float64} 
+    f1_std::Vector{Float64}
+    f1_min::Vector{Float64}
+    f1_max::Vector{Float64}
+    percent_front::Vector{Float64}
+    percent_dom::Vector{Float64}
+    percent_hyperv::Vector{Float64}
+    best_front_percent::Float64
+    best_hyperv_percent::Float64
+end
 
-function main()
+
+function main(suppress_plots=false)
+
+    stats = 
 
     population::Vector{BitVector} = initialisePopulation(POP_SIZE)
 
     all_points_err::Vector{Float64} = collect(values(ERROR_TABLE))
     all_points_pen::Vector{Float64} = collect(values(PEN_TABLE))
     total_population = [digits(i, base=2, pad=GENE_SIZE) for i in 1:2^(GENE_SIZE)]
-    total_pareto_front::Vector = total_population[findall(x -> x == 1, get_population_ranks(all_points_err, all_points_pen))]
-
+    total_pareto_indices = findall(x -> x == 1, get_population_ranks(all_points_err, all_points_pen))
+    total_pareto_front::Vector = total_population[total_pareto_indices]
+    total_pareto_front_values = collect(zip(all_points_err[total_pareto_indices], all_points_pen[total_pareto_indices]))
+    total_pareto_front_values = unique(total_pareto_front_values)
+    hypervolume_ref_point = [maximum(all_points_err), maximum(all_points_pen)]
+    reference_hypervolume = round(hypervolume(total_pareto_front_values, hypervolume_ref_point), digits=3)
 
     for i in 1:NUM_ITERATIONS
+        parents::Vector = parentSelectionNSGA(population, NUM_PARENTS)
+        children::Vector{BitVector} = deepcopy(parents)
+        uniformCrossover!(children, CROSSOVER_RATE)
+        Mutations.applyMutationStandard!(children, MUTATION_RATE)
+
+        population = survivorSelectionNSGA(parents, children)
+
         new_fitness_one::Vector{Float64} = evaluate_fitness_one(population)
         new_fitness_two::Vector{Float64} = evaluate_fitness_two(population)
+
+        pareto_front_indices = findall(x -> x == 1, get_population_ranks(new_fitness_one, new_fitness_two))
+        pareto_front_values = collect(zip(new_fitness_one[pareto_front_indices], new_fitness_two[pareto_front_indices]))
+        pareto_front_values = unique(pareto_front_values)
 
         print("Generation $(i) | ")
         print("F1 $(round(mean(new_fitness_one), digits=3)) [$(round(minimum(new_fitness_one), digits=3)) - $(round(maximum(new_fitness_one), digits=3))] [+/- $(round(std(new_fitness_one), digits=3))] | ")
         print("F2 $(round(mean(new_fitness_two), digits=3)) [$(round(minimum(new_fitness_two), digits=3)) - $(round(maximum(new_fitness_two), digits=3))] [+/- $(round(std(new_fitness_two), digits=3))] | ")
         print("G Div $(round(mean([sum(x .!= y) for x in population, y in population]), digits=3)) | ")
         print("% of Front $(length(setdiff(total_pareto_front, population))/length(total_pareto_front)*100) | ")
-        print("% of Dominated Solns $(length(setdiff(population, total_pareto_front))/length(population)*100)")
+        print("% of Dominated Solns $(length(setdiff(population, total_pareto_front))/length(population)*100) | ")
+        print("Hypervolume $(round(hypervolume(pareto_front_values, hypervolume_ref_point), digits=3))/$(reference_hypervolume)")
         println()
-
         
+        if !suppress_plots
         plot(
             all_points_err, all_points_pen,
             seriestype=:scatter,
@@ -279,16 +328,8 @@ function main()
             label="Population"
         )
         savefig("out/landscapeonly_$(i).png")
-
-        parents::Vector = parentSelectionNSGA(population, NUM_PARENTS)
-        children::Vector{BitVector} = deepcopy(parents)
-        uniformCrossover!(children, CROSSOVER_RATE)
-        Mutations.applyMutationStandard!(children, MUTATION_RATE)
-
-        population = survivorSelectionNSGA(parents, children)
+        end
     end
-
-
 end
 
-main()
+main(true)
