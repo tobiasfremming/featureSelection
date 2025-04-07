@@ -264,8 +264,6 @@ end
 
 function main(suppress_plots=false)
 
-    stats = 
-
     population::Vector{BitVector} = initialisePopulation(POP_SIZE)
 
     all_points_err::Vector{Float64} = collect(values(ERROR_TABLE))
