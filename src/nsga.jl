@@ -1,6 +1,10 @@
 using Random
 using StatsBase
 using Plots
+using Dates
+using FileIO
+using DataFrames
+using CSV
 
 include("lookup_table.jl")
 using .LookupTableModule
@@ -10,6 +14,12 @@ include("GA/mutate.jl")
 DATASET::String = ARGS[1]
 ERROR_TABLE::LookupTableModule.LookupTable = LookupTableModule.load("../luts/$(DATASET)_err.pickle")
 PEN_TABLE::LookupTableModule.LookupTable = LookupTableModule.load("../luts/$(DATASET)_pen.pickle")
+SAVEPATH = "out/$(Dates.format(Dates.now(), "dd.mm.HH.MM"))"
+if !isdir(SAVEPATH)
+    mkpath(SAVEPATH)
+    mkpath("$(SAVEPATH)/plots")
+    mkpath("$(SAVEPATH)/runs")
+end
 
 POP_SIZE = 200
 NUM_PARENTS = 200
@@ -30,6 +40,21 @@ end
 # set the penalty of the zero index to be the maximum
 ZERO_VALUE_F1::Float64 = maximum(map(x -> ERROR_TABLE[x], collect(keys(ERROR_TABLE)))) + 1
 ZERO_VALUE_F2::Float64 = maximum(map(x -> PEN_TABLE[x], collect(keys(PEN_TABLE)))) + 1
+
+function hypervolume(pareto_front, reference_point)
+    # Sort points by the first objective (minimization assumed)
+    sorted_front = sort(pareto_front, by=x -> x[1], rev=true)
+
+    hv = 0.0
+    prev_x = reference_point[1]
+
+    for (x, y) in sorted_front
+        hv += (reference_point[2] - y) * (prev_x - x)
+        prev_x = x
+    end
+
+    return hv
+end
 
 function onePointCrossover!(population::Vector{BitVector}, prob::Float64)
     """
@@ -230,30 +255,107 @@ function survivorSelectionNSGA(parents::Vector, children::Vector)::Vector
     return deepcopy(output_population)
 end
 
+mutable struct Statistics
+    f2_mean::Vector{Float64}
+    f2_std::Vector{Float64}
+    f2_min::Vector{Float64}
+    f2_max::Vector{Float64}
+    f1_mean::Vector{Float64} 
+    f1_std::Vector{Float64}
+    f1_min::Vector{Float64}
+    f1_max::Vector{Float64}
+    percent_front::Vector{Float64}
+    percent_dom::Vector{Float64}
+    hyperv::Vector{Float64}
+    best_front_percent::Float64
+    best_hyperv::Float64
+    best_hyperv_front::Vector{BitVector}
+end
 
-function main()
+
+function main(suppress_plots=false, blind_search=false)
 
     population::Vector{BitVector} = initialisePopulation(POP_SIZE)
 
-    all_points_err::Vector{Float64} = collect(values(ERROR_TABLE))
-    all_points_pen::Vector{Float64} = collect(values(PEN_TABLE))
-    total_population = [digits(i, base=2, pad=GENE_SIZE) for i in 1:2^(GENE_SIZE)]
-    total_pareto_front::Vector = total_population[findall(x -> x == 1, get_population_ranks(all_points_err, all_points_pen))]
+    # reference values to be used when we are not doing a blind search
+    if (!blind_search)
+        all_points_err::Vector{Float64} = collect(values(ERROR_TABLE))
+        all_points_pen::Vector{Float64} = collect(values(PEN_TABLE))
+        total_population = [digits(i, base=2, pad=GENE_SIZE) for i in 1:2^(GENE_SIZE)]
+        total_pareto_indices = findall(x -> x == 1, get_population_ranks(all_points_err, all_points_pen))
+        total_pareto_front::Vector = total_population[total_pareto_indices]
+        total_pareto_front_values = collect(zip(all_points_err[total_pareto_indices], all_points_pen[total_pareto_indices]))
+        total_pareto_front_values = unique(total_pareto_front_values)
+        hypervolume_ref_point = [maximum(all_points_err), maximum(all_points_pen)]
+        reference_hypervolume = round(hypervolume(total_pareto_front_values, hypervolume_ref_point), digits=3)
+    end
 
+    # statistics
+    f2_mean::Vector{Float64} = []
+    f2_std::Vector{Float64} = []
+    f2_min::Vector{Float64} = []
+    f2_max::Vector{Float64} = []
+    f1_mean::Vector{Float64} = []
+    f1_std::Vector{Float64} = []
+    f1_min::Vector{Float64} = []
+    f1_max::Vector{Float64} = []
+    percent_front::Vector{Float64} = []
+    percent_dom::Vector{Float64} = []
+    hyperv::Vector{Float64} = []
+    best_soln::Vector{BitVector} = []
 
     for i in 1:NUM_ITERATIONS
+        parents::Vector = parentSelectionNSGA(population, NUM_PARENTS)
+        children::Vector{BitVector} = deepcopy(parents)
+        uniformCrossover!(children, CROSSOVER_RATE)
+        Mutations.applyMutationStandard!(children, MUTATION_RATE)
+
+        population = survivorSelectionNSGA(parents, children)
+
         new_fitness_one::Vector{Float64} = evaluate_fitness_one(population)
         new_fitness_two::Vector{Float64} = evaluate_fitness_two(population)
 
+        pareto_front_indices = findall(x -> x == 1, get_population_ranks(new_fitness_one, new_fitness_two))
+        pareto_front_values = collect(zip(new_fitness_one[pareto_front_indices], new_fitness_two[pareto_front_indices]))
+        pareto_front_values = unique(pareto_front_values)
+
+        # log results
         print("Generation $(i) | ")
         print("F1 $(round(mean(new_fitness_one), digits=3)) [$(round(minimum(new_fitness_one), digits=3)) - $(round(maximum(new_fitness_one), digits=3))] [+/- $(round(std(new_fitness_one), digits=3))] | ")
         print("F2 $(round(mean(new_fitness_two), digits=3)) [$(round(minimum(new_fitness_two), digits=3)) - $(round(maximum(new_fitness_two), digits=3))] [+/- $(round(std(new_fitness_two), digits=3))] | ")
         print("G Div $(round(mean([sum(x .!= y) for x in population, y in population]), digits=3)) | ")
-        print("% of Front $(length(setdiff(total_pareto_front, population))/length(total_pareto_front)*100) | ")
-        print("% of Dominated Solns $(length(setdiff(population, total_pareto_front))/length(population)*100)")
+        print("% of Dominated Solns $(round(length(setdiff(population, total_pareto_front))/length(population)*100, digits=3)) | ")
+        if !blind_search
+            print("% of Front $(round(length(setdiff(total_pareto_front, population))/length(total_pareto_front)*100, digits=3)) | ")
+            print("Hypervolume $(round(hypervolume(pareto_front_values, hypervolume_ref_point), digits=3))/$(reference_hypervolume)")
+        else
+            print("Hypervolume $(round(hypervolume(pareto_front_values, hypervolume_ref_point), digits=3))")
+        end
         println()
 
-        
+        # store results
+        push!(f2_mean, mean(new_fitness_two))
+        push!(f1_mean, mean(new_fitness_one))
+        push!(f2_std, std(new_fitness_two))
+        push!(f1_std, std(new_fitness_one))
+        push!(f2_min, minimum(new_fitness_two))
+        push!(f1_min, minimum(new_fitness_one))
+        push!(f2_max, maximum(new_fitness_two))
+        push!(f1_max, maximum(new_fitness_one))
+        push!(percent_dom, length(setdiff(population, total_pareto_front))/length(population)*100)
+        push!(hyperv, hypervolume(pareto_front_values, hypervolume_ref_point))
+
+        if !blind_search
+            push!(percent_front, length(setdiff(total_pareto_front, population))/length(total_pareto_front)*100)
+        else
+            push!(percent_front, -1)
+        end
+
+        if hyperv[end] == maximum(hyperv)
+            best_soln = deepcopy(unique(population[pareto_front_indices]))
+        end
+
+        if !suppress_plots
         plot(
             all_points_err, all_points_pen,
             seriestype=:scatter,
@@ -269,7 +371,7 @@ function main()
             marker_z=get_population_ranks(new_fitness_one, new_fitness_two),
             label="Population"
         )
-        savefig("out/landscape_$(i).png")
+        savefig("$(SAVEPATH)/plots/landscape_$(i).png")
 
         plot(
             new_fitness_one, new_fitness_two, 
@@ -278,17 +380,61 @@ function main()
             marker_z=get_population_ranks(new_fitness_one, new_fitness_two),
             label="Population"
         )
-        savefig("out/landscapeonly_$(i).png")
-
-        parents::Vector = parentSelectionNSGA(population, NUM_PARENTS)
-        children::Vector{BitVector} = deepcopy(parents)
-        uniformCrossover!(children, CROSSOVER_RATE)
-        Mutations.applyMutationStandard!(children, MUTATION_RATE)
-
-        population = survivorSelectionNSGA(parents, children)
+        savefig("$(SAVEPATH)/plots/landscapeonly_$(i).png")
+        end
     end
 
-
+    return Statistics(
+        f2_mean, f2_std, f2_min, f2_max, f1_mean, f1_std, f1_min, f1_max, percent_front, percent_dom, hyperv,
+        maximum(percent_front), maximum(hyperv), best_soln
+    )
 end
 
-main()
+# create the folders
+
+NUM_TRIALS = 20
+best_hypervs = []
+best_front_percents = []
+best_solns = []
+for i in 1:NUM_TRIALS
+    results::Statistics = main(i != NUM_TRIALS, false)
+    df = DataFrame(
+        generation = collect(1:length(results.f2_mean)),
+        f1_mean = results.f1_mean,
+        f1_std = results.f1_std,
+        f1_min = results.f1_min,
+        f1_max = results.f1_max,
+        f2_mean = results.f2_mean,
+        f2_std = results.f2_std,
+        f2_min = results.f2_min,
+        f2_max = results.f2_max,
+        percent_front = results.percent_front,
+        percent_dom = results.percent_dom,
+        hyperv = results.hyperv
+    )
+    CSV.write("$(SAVEPATH)/runs/result_$(i).csv", df)
+    push!(best_hypervs, results.best_hyperv)
+    push!(best_front_percents, results.best_front_percent)
+    push!(best_solns, results.best_hyperv_front)
+end
+df = DataFrame(
+    trial = collect(1:NUM_TRIALS),
+    best_hyperv = best_hypervs,
+    best_front_percents = best_front_percents
+)
+CSV.write("$(SAVEPATH)/aggregates.csv", df)
+open("$(SAVEPATH)/best_soln.txt", "w") do f
+    write(f, string(best_solns[argmax(best_hypervs)]))
+end
+println("Enter a description of this run: ")
+description = readline()
+open("$(SAVEPATH)/index.txt", "w") do f
+    write(f, "Dataset: $(DATASET)\n")
+    write(f, "Description: $(description)\n")
+    write(f, "Population Size: $(POP_SIZE)\n")
+    write(f, "Number of Parents: $(NUM_PARENTS)\n")
+    write(f, "Number of Generations: $(NUM_ITERATIONS)\n")
+    write(f, "Number of Trials: $(NUM_TRIALS)\n")
+    write(f, "Mutation Rate: $(MUTATION_RATE)\n")
+    write(f, "Crossover Rate: $(CROSSOVER_RATE)")    
+end
