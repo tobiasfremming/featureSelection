@@ -32,6 +32,7 @@ function crossover(chromosome1::Chromosome, chromosome2::Chromosome)
         end
     end
 
+    return Chromosome(offspring_genes, 0.0, 0.0)
 
     
 end
