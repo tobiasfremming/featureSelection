@@ -1,11 +1,10 @@
 
-include("agent.jl")
-using .AgentModule
-
 module Crossover
 
+include("agent.jl")
+using .Agent
 
-function crossover(chromosome1::Chromosome, chromosome2::Chromosome)
+function crossover(chromosome1::Agent.Chromosome, chromosome2::Agent.Chromosome)
     offspring_genes = Vector{Gene}()
     genes1 = chromosome1.genes
     genes2 = chromosome2.genes

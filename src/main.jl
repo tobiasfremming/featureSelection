@@ -1,4 +1,9 @@
 include("lookup_table.jl")
+include("GA/agent.jl")
+include("GA/crossover.jl")
+include("GA/mutate.jl")
+include("GA/beat_selection.jl")
+
 using .LookupTableModule, .Agent, .Crossover, .Mutations, .BeatSelection
 
 dataset_name = "diabetes_dataset"
@@ -27,7 +32,7 @@ end
 # Save the table on exit
 # atexit(() -> LookupTableModule.save(lut, lut_path))
 
-function run_generation!(population::Vector{Chromosome}, c1, c2, c3, delta_t, elite_fraction)
+function run_generation!(population::Vector{Agent.Chromosome}, c1, c2, c3, delta_t, elite_fraction)
     species = Agent.speciate_and_fitness_sharing!(population, c1, c2, c3, delta_t)
     
     # Sort by fitness
