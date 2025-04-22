@@ -34,7 +34,7 @@ end
 function binary_pso(fitness; num_features::Int, num_particles::Int=50, iterations::Int=50)
     swarm = init_swarm(num_particles, num_features)
     w_start, w_end = 0.9, 0.4  # Dynamically decreasing inertia
-    c1, c2 = 1.5, 2.5          # Slightly favor social component
+    c1, c2 = 2.2, 2.5          # Slightly favor social component
     particle_stagnation = zeros(Int, num_particles)
     stagnation_limit = 15
     V_max = 6.0  
