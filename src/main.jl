@@ -4,7 +4,9 @@ include("GA/crossover.jl")
 include("GA/mutate.jl")
 include("GA/beat_selection.jl")
 
-using .LookupTableModule, .Agent, .Crossover, .Mutations, .BeatSelection
+using .LookupTableModule
+using .Agent
+using .Mutations
 
 dataset_name = "diabetes_dataset"
 dataset_extension = ".csv"
@@ -14,8 +16,14 @@ lut_extension = ".pkl"
 lut_path = "../luts/$dataset_name$lut_name$lut_extension"
 
 # Dummy fitness function
-function dummy_fitness(chromosome::Vector{Bool})
-    return sum(chromosome) + rand() * 0.01
+function dummy_fitness(chromosome::Agent.Chromosome)
+    # This is a placeholder. Replace with actual fitness evaluation logic.
+    # Example: sum of gene weights divided by number of genes
+    gene_sum = 0.0
+    for gene in chromosome.genes
+        gene_sum += gene.weight
+    end
+    return sum(gene_sum/ length(chromosome.genes))
 end
 
 # Create or load LUT
@@ -33,25 +41,68 @@ end
 # atexit(() -> LookupTableModule.save(lut, lut_path))
 
 function run_generation!(population::Vector{Agent.Chromosome}, c1, c2, c3, delta_t, elite_fraction)
+    for chromosome::Agent.Chromosome in population
+        # Evaluate fitness
+        chromosome.fitness = dummy_fitness(chromosome)
+    end
     species = Agent.speciate_and_fitness_sharing!(population, c1, c2, c3, delta_t)
     
     # Sort by fitness
     sort!(population, by = x -> -x.adjusted_fitness)
 
     # Elitism
-    elite_count = Int(round(length(population) * elite_fraction))
+    population_size = length(population)
+    elite_count = Int(round(population_size * elite_fraction))
     new_population = deepcopy(population[1:elite_count])
 
     # Fill the rest
-    while length(new_population) < length(population)
-        parent1 = select_parent(population)
-        parent2 = select_parent(population)
-        child = Crossover.crossover(parent1, parent2)
-        mutate!(child)
+    #while length(new_population) < length(population)
+        #parent1 = BeatSelection.select_parents_nsga(population)
+        #parent2 = BeatSelection.select_parents_nsga(population)
+    parents = select_parents_nsga(population, population_size)
+
+    for i in 1:2:length(parents)-1
+        parent1 = parents[i]
+        parent2 = parents[i+1]
+        child = crossover(parent1, parent2)
+        Mutations.mutate!(child, 
+            prob_weight_perturb=0.8,
+            prob_weight_reset=0.1,
+            prob_toggle=0.01,
+            prob_add_gene=0.05,
+            prob_add_node=0.03,
+            max_node_id=100
+        )
         push!(new_population, child)
     end
+
+  
 
     # Replace old population
     empty!(population)
     append!(population, new_population)
 end
+
+function main()
+    # Load dataset
+
+    # Initialize population
+    population_size = 100
+    population = [Agent.create_random_chromosome(10, 0, 1) for _ in 1:population_size]
+
+    # Parameters
+    c1 = 1.0
+    c2 = 1.0
+    c3 = 1.0
+    delta_t = 0.5
+    elite_fraction = 0.5
+
+    # Run generations
+    for generation in 1:100
+        run_generation!(population, c1, c2, c3, delta_t, elite_fraction)
+        println("Generation $generation: Best fitness: $(population[1].fitness)")
+    end
+
+end
+
+main()

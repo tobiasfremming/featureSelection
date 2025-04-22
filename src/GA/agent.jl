@@ -98,12 +98,11 @@ function genomic_distance(
     c2::Float64, 
     c3::Float64
     )
-    min, max = get_innovation_range(chromosome1, chromosome2)
-    disjoint, excess = calculate_number_of_disjoint_and_excess_genes(min, max, chromosome1, chromosome2)
+    min_range, max_range = get_innovation_range(chromosome1, chromosome2)
+    disjoint, excess = calculate_number_of_disjoint_and_excess_genes(min_range, max_range, chromosome1, chromosome2)
 
     # Calculate average disabled difference
-    disabled_difference = 0
-    enabled_difference = 0
+    
     genes2 = Dict(gene.innovation => gene for gene in chromosome2.genes)
 
 
@@ -118,10 +117,18 @@ function genomic_distance(
             
     #     end
     # end
+    weights = 0.0
+    for gene1 in chromosome1.genes
+        if haskey(genes2, gene1.innovation)
+            gene2 = genes2[gene1.innovation]
+            
+            weights += (gene1.weight - gene2.weight)^2 + (gene1.bias - gene2.bias)^2
+        end
+    end
     
-    enabled_flag_diff_ratio::Float64 = Float64(disabled_difference) / Float64(enabled_difference + 1e-7)
+    #enabled_flag_diff_ratio::Float64 = Float64(disabled_difference) / Float64(enabled_difference + 1e-7)
     N = max(min(length(chromosome1.genes), length(chromosome2.genes)), 1)
-    return c1 * excess / N + c2 * disjoint / N + c3 * enabled_flag_diff_ratio # TODO: Should i skip W, as I dont have weights and this is not part of the original NEAT paper?
+    return c1 * excess / N + c2 * disjoint / N + c3 * weights # add /N at the end there?
 
 end
 
@@ -221,7 +228,10 @@ function create_expression_from_start(start::Int64, stop::Int64)
 end
 
 
-function create_random_expression(start::Int64, stop::Int64)
+function create_random_expression(start::Int, stop::Int)
+    if start > stop
+        start, stop = stop, start  # swap to make a valid range
+    end
     from = rand(start:stop)
     to = rand(start:stop)
     return Expression(from, to)

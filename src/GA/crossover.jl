@@ -1,11 +1,10 @@
 
-module Crossover
 
-include("agent.jl")
-using .Agent
+
+
 
 function crossover(chromosome1::Agent.Chromosome, chromosome2::Agent.Chromosome)
-    offspring_genes = Vector{Gene}()
+    offspring_genes = Vector{Agent.Gene}()
     genes1 = chromosome1.genes
     genes2 = chromosome2.genes
     #(max_innovation, min_innovation) = AgentModule.get_innovation_range(chromosome1, chromosome2)
@@ -31,7 +30,7 @@ function crossover(chromosome1::Agent.Chromosome, chromosome2::Agent.Chromosome)
         end
     end
 
-    return Chromosome(offspring_genes, 0.0, 0.0)
+    return Agent.Chromosome(offspring_genes, 0.0, 0.0)
 
     
 end
@@ -44,7 +43,3 @@ end
 
 
 
-
-
-
-end # module
