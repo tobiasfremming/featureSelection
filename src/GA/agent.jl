@@ -17,6 +17,10 @@ mutable struct Gene
     enabled::Bool
 end
 
+mutable struct NodeGene
+    node_id::Int64
+    bias::Float64
+end
 
 #  resetting the list every generation as opposed to keeping a growing list of mutations throughout evolution is sufficient to prevent an explosion of innovation numbers. 
 global innovations = Dict{Expression, Int64}()
@@ -24,6 +28,7 @@ global innovations = Dict{Expression, Int64}()
 
 mutable struct Chromosome
     genes::Vector{Gene}
+    node_genes::Vector{NodeGene}
     fitness::Float64
     adjusted_fitness::Float64
 end
