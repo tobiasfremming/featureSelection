@@ -1,7 +1,6 @@
 module Mutations
 
-include("agent.jl")
-using .Agent
+using ..Agent
 
 using Random
 
