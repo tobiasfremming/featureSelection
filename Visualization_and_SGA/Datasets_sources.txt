@@ -1,0 +1,3 @@
+Diabetes: https://www.kaggle.com/datasets/hasibur013/diabetes-dataset/code
+Heart_failure: https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction
+Breast_cancer: https://archive.ics.uci.edu/dataset/14/breast+cancer
