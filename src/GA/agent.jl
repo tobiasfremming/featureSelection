@@ -17,6 +17,10 @@ mutable struct Gene
     enabled::Bool
 end
 
+mutable struct NodeGene
+    node_id::Int64
+    bias::Float64
+end
 
 #  resetting the list every generation as opposed to keeping a growing list of mutations throughout evolution is sufficient to prevent an explosion of innovation numbers. 
 global innovations = Dict{Expression, Int64}()
@@ -24,6 +28,7 @@ global innovations = Dict{Expression, Int64}()
 
 mutable struct Chromosome
     genes::Vector{Gene}
+    node_genes::Vector{NodeGene}
     fitness::Float64
     adjusted_fitness::Float64
 end
@@ -47,6 +52,33 @@ function get_highest_and_lowest_innovation_number(chromosome::Chromosome)
         end
     end
     return (highest, lowest)
+end
+
+# mutable struct Gene
+#     innovation::Int64
+#     expression::Expression
+#     weight::Float64 # weight of the expression. Between -1 and 1. Higher weights mean higher chance of activation for incoming bit
+#     bias::Float64 # threshhold for activation (bit getting turned on) for outgoing bit
+#     enabled::Bool
+# end
+
+function forward(chromosome::Chromosome)
+    bit_chars = Char[]
+    for gene::Gene in chromosome.genes
+        sum_weights = 0.0
+        for possible_incoming_genes::Gene in chromosome.genes
+            if possible_incoming_genes.enabled && possible_incoming_genes.expression.from == gene.innovation
+                sum_weights += possible_incoming_genes.weight
+            end
+        end
+        bit = gene.bias + sum_weights
+        if bit > 0
+            push!(bit_chars, '1')
+        else
+            push!(bit_chars, '0')
+        end
+    end
+    return bit_chars
 end
 
 

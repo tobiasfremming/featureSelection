@@ -16,14 +16,20 @@ lut_extension = ".pkl"
 lut_path = "../luts/$dataset_name$lut_name$lut_extension"
 
 # Dummy fitness function
-function dummy_fitness(chromosome::Agent.Chromosome)
-    # This is a placeholder. Replace with actual fitness evaluation logic.
-    # Example: sum of gene weights divided by number of genes
-    gene_sum = 0.0
-    for gene in chromosome.genes
-        gene_sum += gene.weight
-    end
-    return sum(gene_sum/ length(chromosome.genes))
+# function dummy_fitness(chromosome::Agent.Chromosome)
+#     # This is a placeholder. Replace with actual fitness evaluation logic.
+#     # Example: sum of gene weights divided by number of genes
+#     gene_sum = 0.0
+#     for gene in chromosome.genes
+#         gene_sum += gene.weight
+#     end
+#     return sum(gene_sum/ length(chromosome.genes))
+# end
+
+function dummy_fitness(bits::Vector{Char})
+    # return average number of 1s
+    return sum(bit == '1' ? 1 : 0 for bit in bits) / length(bits)
+    
 end
 
 # Create or load LUT
@@ -43,7 +49,8 @@ end
 function run_generation!(population::Vector{Agent.Chromosome}, c1, c2, c3, delta_t, elite_fraction)
     for chromosome::Agent.Chromosome in population
         # Evaluate fitness
-        chromosome.fitness = dummy_fitness(chromosome)
+        bit_vector = Agent.forward(chromosome)
+        chromosome.fitness = dummy_fitness(bit_vector)
     end
     species = Agent.speciate_and_fitness_sharing!(population, c1, c2, c3, delta_t)
     
@@ -67,8 +74,8 @@ function run_generation!(population::Vector{Agent.Chromosome}, c1, c2, c3, delta
         child = crossover(parent1, parent2)
         Mutations.mutate!(child, 
             prob_weight_perturb=0.8,
-            prob_weight_reset=0.1,
-            prob_toggle=0.01,
+            prob_weight_reset=0.3,
+            prob_toggle=0.1,
             prob_add_gene=0.05,
             prob_add_node=0.03,
             max_node_id=100

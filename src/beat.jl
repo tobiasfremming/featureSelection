@@ -6,7 +6,7 @@ using CSV
 using Statistics
 
 # === Include your modules ===
-include("agent.jl")
+include("GA/agent.jl")
 include("GA/crossover.jl")
 include("GA/mutate.jl")
 include("lookup_table.jl")
