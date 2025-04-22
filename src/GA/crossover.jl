@@ -3,7 +3,7 @@
 
 
 
-function crossover(chromosome1::Agent.Chromosome, chromosome2::Agent.Chromosome)
+function crossover2(chromosome1::Agent.Chromosome, chromosome2::Agent.Chromosome)
     offspring_genes = Vector{Agent.Gene}()
     genes1 = chromosome1.genes
     genes2 = chromosome2.genes
@@ -34,6 +34,37 @@ function crossover(chromosome1::Agent.Chromosome, chromosome2::Agent.Chromosome)
 
     
 end
+
+
+function crossover(parent1::Agent.Chromosome, parent2::Agent.Chromosome)
+    # Ensure parent1 is more fit or randomly pick if equal
+    if parent2.fitness > parent1.fitness
+        parent1, parent2 = parent2, parent1
+    end
+
+    genes1 = Dict(g.innovation => g for g in parent1.genes)
+    genes2 = Dict(g.innovation => g for g in parent2.genes)
+
+    all_innovations = union(keys(genes1), keys(genes2))
+    offspring_genes = Agent.Gene[]
+
+    for innov in sort(collect(all_innovations))
+        g1 = get(genes1, innov, nothing)
+        g2 = get(genes2, innov, nothing)
+
+        if g1 !== nothing && g2 !== nothing
+            # Matching gene: randomly choose one
+            push!(offspring_genes, deepcopy(rand(Bool) ? g1 : g2))
+        elseif g1 !== nothing
+            # Disjoint or excess from more fit parent (parent1)
+            push!(offspring_genes, deepcopy(g1))
+        end
+        # Note: disjoint/excess genes from less fit parent are skipped
+    end
+
+    return Agent.Chromosome(offspring_genes, 0.0, 0.0)
+end
+
 
 
 

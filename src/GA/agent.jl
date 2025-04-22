@@ -49,6 +49,33 @@ function get_highest_and_lowest_innovation_number(chromosome::Chromosome)
     return (highest, lowest)
 end
 
+# mutable struct Gene
+#     innovation::Int64
+#     expression::Expression
+#     weight::Float64 # weight of the expression. Between -1 and 1. Higher weights mean higher chance of activation for incoming bit
+#     bias::Float64 # threshhold for activation (bit getting turned on) for outgoing bit
+#     enabled::Bool
+# end
+
+function forward(chromosome::Chromosome)
+    bit_chars = Char[]
+    for gene::Gene in chromosome.genes
+        sum_weights = 0.0
+        for possible_incoming_genes::Gene in chromosome.genes
+            if possible_incoming_genes.enabled && possible_incoming_genes.expression.from == gene.innovation
+                sum_weights += possible_incoming_genes.weight
+            end
+        end
+        bit = gene.bias + sum_weights
+        if bit > 0
+            push!(bit_chars, '1')
+        else
+            push!(bit_chars, '0')
+        end
+    end
+    return bit_chars
+end
+
 
 function get_innovation_range(chromosome1::Chromosome, chromosome2::Chromosome)
     min1, max1 = get_highest_and_lowest_innovation_number(chromosome1)
