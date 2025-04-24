@@ -7,9 +7,12 @@ using Plots
 using Printf
 using Base.Threads
 
-lut_cancer = "Lookup_tables/cancer_fitness_lut.csv"
-lut_diabetes = "Lookup_tables/diabetes_fitness_lut.csv"
-lut_heart = "Lookup_tables/heart_fitness_lut.csv"
+include("Local_search.jl")
+using .local_search 
+
+lut_cancer = joinpath(@__DIR__, "Lookup_tables/cancer_fitness_lut.csv")
+lut_diabetes = joinpath(@__DIR__, "Lookup_tables/diabetes_fitness_lut.csv")
+lut_heart = joinpath(@__DIR__, "Lookup_tables/heart_fitness_lut.csv")
 lut_df = CSV.read(lut_heart,DataFrame,header=1,types=Dict(1 => String, 2 => Float64, 3 => Float64, 4 => Float64, 5 => Float64, 6 => Float64))
 lut_int = Dict(lut_df.key .=> lut_df.f16)
 GENE_SIZE = length(string(lut_df[end,1]))
@@ -18,6 +21,7 @@ GENE_SIZE = length(string(lut_df[end,1]))
 lut_df.key = [lpad(string(x), GENE_SIZE, '0') for x in lut_df.key]  # converts Ints to padded strings
 lut_df.key = [[c == '1' for c in s] for s in lut_df.key]  # converts strings to Vector{Bool}
 lut = Dict(lut_df.key .=> lut_df.f16)
+lut_model_error = Dict(lut_df.key .=> lut_df.err)
 
 
 # random population generator
@@ -226,12 +230,14 @@ end
 
 
 # parameter selection:
-pop_size = 20
-n_epochs = 50
+pop_size = 50
+n_epochs = 100
 p_crossover = 0.8
 p_mutation = 0.03
 
 function main()
+    feature_impact = zeros(GENE_SIZE)
+    feature_counts = zeros(Int, GENE_SIZE)
     # statistical tracking analysis
     epoch_mean = Vector{Float64}(undef, n_epochs+1)
     epoch_max = Vector{Float64}(undef, n_epochs+1)
@@ -262,6 +268,23 @@ function main()
         children = one_point_crossover(parents, p_crossover)
         mutate_pop!(children, p_mutation)
         f_children = fitness(children, lut)
+
+        # create the feature_impact table and the feature_counts table
+        # for i in eachindex(children)
+        #     child = copy(children[i])
+        #     best_local_solution, feature_impact, feature_counts = local_search.local_bitflip_search(child, fitness, lut_model_error, feature_impact, feature_counts)
+        # end
+
+        # # greedy local search on the children using the feature_impact table calculated above
+        # for i in eachindex(children)
+        #     child = copy(children[i])
+        #     f_child = copy(f_children[i])
+        #     best_local_indiv, its_fitness = local_search.local_greedy_search(child, f_child, fitness, lut, feature_impact, feature_counts, 4)
+        #     children[i] = best_local_indiv
+        #     f_children[i] = its_fitness
+        #     # println(f_children[i])
+        # end
+
         # pop = survivor_selection_f(pop, children)  # use fitness based survivior selection
         # pop = survivor_selection_g(pop, children)  # use generational survivior selection
         pop, f = survivor_selection_f(pop, children, f, f_children)
@@ -282,11 +305,41 @@ function main()
     plot!(0:length(epoch_max)-1, epoch_max, label="Max fitness", color=:green, lw=2)  # Second vector (use plot! to overlay)
     plot!(0:length(epoch_min)-1, epoch_min, label="Min fitness", color=:red, lw=2)
     # plot(0:length(diversity)-1, diversity, label="diversity", color=:black, lw=2)
-    # return epoch_fittest_individual
+    return epoch_fittest_individual, epoch_min[end], feature_impact, feature_counts
 end
 
-epoch_fittest_individuals = main()
+epoch_fittest_individuals, f, feature_impact, feature_counts = main()
+feature_impact ./ (feature_counts .+ 1e-3)
 println("global minimum = ", lut_df[!,1][findmin(lut_df[!,5])[2]], minimum(lut_df[!,5]))
+
+function statistical_analysis()
+    n_runs = 100
+    # Stats
+    fitness = Vector{Float64}(undef, n_runs)
+    best_indiv = Vector{Vector{Bool}}(undef, n_runs)
+    num_iterations_to_reach_best_fitness = Vector{Int64}(undef, n_runs)
+    for i in 1:n_runs
+        solutions, f = main()
+        fitness[i] = f
+        best_indiv[i] = solutions[end]
+        num_iterations_to_reach_best_fitness[i] = findfirst(x -> x == best_indiv[i], solutions)  # finds first appearance of best indiv
+    end
+    return fitness, best_indiv, num_iterations_to_reach_best_fitness
+end
+
+fitness_values, best_indivs, num_iterations_to_reach_best_fitness = statistical_analysis()
+mean_f = mean(fitness_values)
+std_f = std(fitness_values)
+global_optimum = lut_df[!,1][findmin(lut_df[!,5])[2]]
+best_possible_fitness = minimum(lut_df[!,5])
+successful_runs = map(x -> x == global_optimum, best_indivs)
+num_successful_runs = sum(map(x -> x == best_possible_fitness, fitness_values))
+num_ones = count(==(1), successful_runs)
+num_zeros = count(==(0), successful_runs)
+mean_convergance_speed = mean(num_iterations_to_reach_best_fitness)
+std_convergance_speed = std(num_iterations_to_reach_best_fitness)
+
+
 f = map(x -> fitness(x, lut), epoch_fittest_individuals)
 indiv = Bool[1, 1, 0, 1, 0, 1, 0, 1]
 f = fitness(indiv, lut)
