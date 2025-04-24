@@ -5,10 +5,63 @@ sigmoid(x) = 1 / (1 + exp(-x))
 
 # Define fitness function using your lookup table
 # This example uses a placeholder function
-function fitness(bitstring::Vector{Int})
-    # Replace this with your lookup table logic
-    # Example placeholder: maximize sum of selected features
-    return sum(bitstring)
+# function fitness(bitstring::Vector{Int})
+#     # Replace this with your lookup table logic
+#     # Example placeholder: maximize sum of selected features
+#     return sum(bitstring)
+# end
+
+
+struct NKLandscape
+    N::Int
+    K::Int
+    interaction_indices::Vector{Vector{Int}}
+    contribution_table::Vector{Dict{BitVector,Float64}}
+end
+
+# fitness landscape
+
+
+
+# Initialize NK-landscape
+function NKLandscape(N::Int, K::Int)
+    interaction_indices = [sort(randperm(N)[1:K]) for _ in 1:N]
+    contribution_table = [Dict{BitVector, Float64}() for _ in 1:N]
+
+    for i in 1:N
+        num_entries = 2^(K+1)
+        for j in 0:num_entries-1
+            bits = bitstring(j)[end-K:end]
+            key = BitVector(parse.(Int, collect(bits)))
+            contribution_table[i][key] = rand()
+        end
+    end
+
+    return NKLandscape(N, K, interaction_indices, contribution_table)
+end
+
+# Fitness calculation
+function fitness2(nk::NKLandscape, bitstring::Vector{Int})
+    fitness_sum = 0.0
+    for i in 1:nk.N
+        idxs = [i; nk.interaction_indices[i]]
+        key = BitVector(bitstring[idxs])
+        fitness_sum += nk.contribution_table[i][key]
+    end
+    return fitness_sum / nk.N  # Average contribution
+end
+
+function fitness(nk::NKLandscape, bitstring::Vector{Int})
+    ones = 0
+    zeros = 0
+    for i in 1:length(bitstring)
+        if bitstring[i] == 1
+            ones += 0.4
+        else
+            zeros += 1
+        end
+    end
+    return max(ones, zeros) / length(bitstring)
 end
 
 # Initialize PSO parameters
@@ -31,7 +84,7 @@ function init_swarm(num_particles::Int, num_features::Int)
     return swarm
 end
 
-function binary_pso(fitness; num_features::Int, num_particles::Int=50, iterations::Int=50)
+function binary_pso(fitness; num_features::Int, num_particles::Int=50, iterations::Int=50, nk::NKLandscape)
     swarm = init_swarm(num_particles, num_features)
     w_start, w_end = 0.9, 0.4  # Dynamically decreasing inertia
     c1, c2 = 2.2, 2.5          # Slightly favor social component
@@ -56,7 +109,7 @@ function binary_pso(fitness; num_features::Int, num_particles::Int=50, iteration
 
         for (i, p) in enumerate(swarm)
 
-            current_fitness = fitness(p.X)
+            current_fitness = fitness(nk, p.X)
             
             if current_fitness > p.Pbest_fitness
                 p.Pbest = copy(p.X)
@@ -99,7 +152,7 @@ function binary_pso(fitness; num_features::Int, num_particles::Int=50, iteration
             end
 
             # Evaluate fitness
-            current_fitness = fitness(p.X)
+            current_fitness = fitness(nk, p.X)
 
             # Update personal best
             if current_fitness > p.Pbest_fitness
@@ -123,7 +176,10 @@ end
 
 # Example Usage:
 num_features = 100  # Replace with actual number of features
-best_subset, best_fitness = binary_pso(fitness; num_features=num_features, iterations=1000)
+K = 5   # Number of interactions per feature (higher = harder)
+
+nk = NKLandscape(num_features, K)
+best_subset, best_fitness = binary_pso(fitness; num_features=num_features, iterations=1000, nk)
 
 println("Best subset found: ", best_subset)
 println("Best subset fitness: ", best_fitness)
