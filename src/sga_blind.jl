@@ -1,10 +1,6 @@
 using Random
 using StatsBase
 using Plots
-
-include("lookup_table.jl")
-using .LookupTableModule
-
 using Random
 using FileIO
 using Dates
@@ -12,27 +8,20 @@ using FileIO
 using DataFrames
 using CSV
 
-function applyMutationStandard!(population_to_mutate::Array{BitVector}, bitwiseProb::Float64)
-    """
-    Applies standard mutation
-
-    Parameters:
-        population_to_mutate::Array{BitVector} the population to apply mutation to
-        bitwiseProb::Float64 the bitwise probability of mutation being applied
-    """
-    person_length = length(population_to_mutate[1])
-    for person in population_to_mutate
-        flipmask = rand(person_length) .< bitwiseProb
-        person[flipmask] .= .!person[flipmask]
-    end
-end
-
-
+include("lookup_table.jl")
 include("GA/selection.jl")
 include("forest.jl")
+include("GA/binary_mutators.jl")
+include("GA/binary_crossovers.jl")
+include("GA/initialisers.jl")
 
+using .LookupTableModule
+using .BinaryCrossovers
+using .BinaryMutators
+using .Initialisers
+
+# parse dataset
 DATASET::String = ARGS[1]
-
 if DATASET == "cleveland"
     DF = CLEVELAND_DATASET
     FF = computeClevelandFitness
@@ -44,12 +33,14 @@ else
     FF = computeZooFitness
 end
 
+# load the LUT
 if isfile("../luts/_$(DATASET).pickle")
     TABLE::LookupTableModule.LookupTable = LookupTableModule.load("../luts/_$(DATASET).pickle")
 else
     TABLE = LookupTableModule.create()
 end
 
+# generate save folders
 SAVEPATH = "out/$(Dates.format(Dates.now(), "dd.mm.HH.MM"))"
 if !isdir(SAVEPATH)
     mkpath(SAVEPATH)
@@ -57,92 +48,22 @@ end
 
 atexit(() -> LookupTableModule.save(TABLE, "../luts/_$(DATASET).pickle"))
 
-POP_SIZE::Int = 50
-NUM_PARENTS::Int = 70
+# hyperparameters
+POP_SIZE::Int = 20
+NUM_PARENTS::Int = 30
 NUM_ITERATIONS::Int = 500
 GENE_SIZE::Int = size(DF[1], 2)
-MUTATION_RATE::Float64 = 2/(GENE_SIZE + NUM_PARENTS) * 1.2
-CROSSOVER_RATE::Float64 = 0.9
+MUTATION_RATE::Float64 = 2/(GENE_SIZE + NUM_PARENTS) * 1.0
+CROSSOVER_RATE::Float64 = 0.7
 ELITISM_RATIO::Float64 = 0.05
 
 # set the penalty of the zero index to be twice the maximum
 ZERO_VALUE::Float64 = 1000
 ZERO_KEY::String = string(join(Vector{Int}([0 for _ in 1:GENE_SIZE])))
 
-function onePointCrossover!(population::Vector{BitVector}, prob::Float64)
-    """
-    Applies standard one-point crossover within contiguous pairs of children. Splits two genotypes into two partitions and matches opposite partitions for every (contiguous) pair of children.
-    Operations are in-place.
-
-    Parameters:
-        population::Vector{BitVector} the vector of children to crossover. Should have an even length.
-        prob::Float64 the probability of applying the crossover.
-    """
-    for i in 1:Int32((floor(length(population)/2)))
-        parent1 = population[2*i]
-        parent2 = population[2*i-1]
-        if rand() < prob
-            crossover_point = Int32(floor(rand()*(length(population[1]) - 1)) + 1)
-            for i in 1:crossover_point
-                temp = parent1[i]
-                parent1[i] = parent2[i]
-                parent2[i] = temp
-            end
-        end
-    end
-end
-
-function uniformCrossover!(population::Vector{BitVector}, prob::Float64)
-    """
-    Applies uniform crossover within contiguous pairs of children.
-    
-    Parameters:
-        population::Vector{BitVector} the Vector of children to crossover. Should have an even length.
-        prob::Float64 the probability of applying the crossover.
-    """
-    for i in 1:Int32((floor(length(population)/2)))
-        if rand() < prob
-            parent1 = population[2*i]
-            parent2 = population[2*i-1]
-            for i in 1:length(population[1])
-                if rand() > 0.5
-                    temp = parent1[i]
-                    parent1[i] = parent2[i]
-                    parent2[i] = temp
-                end
-            end     
-        end
-    end
-end
-
-function initialisePopulation(nsize::Int64)::Vector{BitVector}
-    """
-    Creates a random and uniform population
-
-    Parameters:
-        nsize::Int64 the size of the population
-    """
-    population::Vector{BitVector} = Vector{BitVector}(undef, nsize)
-    for i in 1:nsize
-        person = bitrand(GENE_SIZE)
-        population[i] = person
-    end
-
-    return population
-end
-
+# evaluate the fitness
 function evaluate_fitness(population::Vector)::Vector{Float64}
     return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? ZERO_VALUE : LookupTableModule.get_or_evaluate!(TABLE, x, FF), population)
-end
-
-
-mutable struct RunStatistics
-    f_mean::Vector{Float64}
-    f_std::Vector{Float64}
-    f_min::Vector{Float64}
-    f_max::Vector{Float64}
-    best_soln::Union{Any, Nothing}
-    best_fitness::Float64
 end
 
 function main()
@@ -152,20 +73,24 @@ function main()
     f_min::Vector{Float64} = []
     f_max::Vector{Float64} = []
 
-    population::Vector = initialisePopulation(POP_SIZE)
+    # population structures
+    population::Vector = Initialisers.initialisePopulation(POP_SIZE, GENE_SIZE)
     population_fitness::Vector{Float64} = evaluate_fitness(population)
 
+    # storage for best results
     best_result::Union{Any, Nothing} = nothing
     best_fitness::Float64 = Inf
 
     for i in 1:NUM_ITERATIONS
-        # parents = Selectors.rankBasedExpSelection(population, population_fitness, NUM_PARENTS, 1.0)
+        # selection
         parents::Vector = Selectors.fitnessProportionateSelection(population, population_fitness, NUM_PARENTS)
         children::Vector = deepcopy(parents)
 
-        uniformCrossover!(children, CROSSOVER_RATE)
-        applyMutationStandard!(children, MUTATION_RATE)
+        # mutation and crossover
+        BinaryCrossovers.uniformCrossover!(children, CROSSOVER_RATE)
+        BinaryMutators.applyMutationStandard!(children, MUTATION_RATE)
 
+        # selection
         population = Selectors.muGammaElitistSelection(population, children, evaluate_fitness(children), population_fitness, ELITISM_RATIO)
         population_fitness = evaluate_fitness(population)
 
@@ -198,7 +123,10 @@ function main()
 
 end
 
+# compute results
 results = main()
+
+# log the statistics
 df = DataFrame(
         generation = collect(1:length(results.f_mean)),
         f_mean = results.f_mean,
@@ -206,13 +134,17 @@ df = DataFrame(
         f_min = results.f_min,
         f_max = results.f_max,
     )
-
 CSV.write("$(SAVEPATH)/run.csv", df)
+
+# log the best result
 open("$(SAVEPATH)/best_soln.txt", "w") do f
     write(f, "$(results.best_soln)\n$(results.best_fitness)")
 end
+
+# save the lookup table
 LookupTableModule.save(TABLE, "$(SAVEPATH)/_$(DATASET).pickle")
 
+# save the run description
 println("Enter a description of this run: ")
 description = readline()
 open("$(SAVEPATH)/index.txt", "w") do f
