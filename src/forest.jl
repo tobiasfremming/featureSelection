@@ -5,28 +5,29 @@ using CSV
 using DataFrames
 
 function RF(train_labels, train_features, test_labels, test_features)
-    model = build_forest(train_labels, train_features, -1, 30, 0.7, -1, 2, 2; rng=MersenneTwister(456))
+    model = build_forest(train_labels, train_features, 0, 30, 0.7, -1, 1, 2; rng=Xoshiro(456))
     preds = apply_forest(model, test_features)
     acc = mean(preds .== test_labels)
     return acc
 end
 
-# function runModel(features, labels, bitmask_integer::Int)
-#     bitmask = [b == '1' for b in last(bitstring(bitmask_integer), size(features, 2))]
-#     n = size(features, 1)
+function runModelInteger(features, labels, bitmask_integer::Int)
+    bitmask = [b == '1' for b in last(bitstring(bitmask_integer), size(features, 2))]
+    n = size(features, 1)
     
-#     accuracies = []
+    accuracies = []
 
-#     for _ in 1:30
-#         train_indices = randperm(MersenneTwister(123), n)[1:Int64(floor(0.7*n))]
-#         test_indices = setdiff(1:n, train_indices)
+    rng = MersenneTwister(123)
+    for _ in 1:30
+        train_indices = randperm(rng, n)[1:Int64(floor(0.7*n))]
+        test_indices = setdiff(1:n, train_indices)
 
-#         acc = RF(labels[train_indices], features[train_indices, bitmask], labels[test_indices], features[test_indices, bitmask])
-#         push!(accuracies, acc)
-#     end
+        acc = RF(labels[train_indices], features[train_indices, findall(bitmask)], labels[test_indices], features[test_indices, findall(bitmask)])
+        push!(accuracies, acc)
+    end
 
-#     return mean(accuracies)
-# end
+    return mean(accuracies)
+end
 
 function runModel(features, labels, bitmask)
     n = size(features, 1)
@@ -64,19 +65,13 @@ CLEVELAND_DATASET = loadClevelandData()
 ZOO_DATASET = loadZooData()
 LETTER_DATASET = loadLetterData()
 
-# function computeClevelandFitness(bitmask_integer::Int)
-#     return 1 - runModel(CLEVELAND_DATASET..., bitmask_integer)
-# end 
+function computeClevelandAccuracy(bitmask_integer::Int)
+    return runModelInteger(CLEVELAND_DATASET..., bitmask_integer)
+end 
 
-# function computeZooFitness(bitmask_integer::Int)
-#     bitmask = [b == '1' for b in bitstring(bitmask_integer)]
-#     return 1 - runModel(ZOO_DATASET..., bitmask_integer) + count(bitmask)/64
-# end
-
-# function computeLetterFitness(bitmask_integer::Int)
-#     bitmask = [b == '1' for b in bitstring(bitmask_integer)]
-#     return 1 - runModel(LETTER_DATASET..., bitmask_integer) + count(bitmask)/8
-# end
+function computeZooAccuracy(bitmask_integer::Int)
+    return runModelInteger(ZOO_DATASET..., bitmask_integer)
+end
 
 function computeClevelandFitness(bitmask)
     return 1 - runModel(CLEVELAND_DATASET..., bitmask)

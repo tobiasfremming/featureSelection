@@ -66,6 +66,15 @@ function evaluate_fitness(population::Vector)::Vector{Float64}
     return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? ZERO_VALUE : LookupTableModule.get_or_evaluate!(TABLE, x, FF), population)
 end
 
+mutable struct RunStatistics
+    f_mean::Vector{Float64}
+    f_std::Vector{Float64}
+    f_min::Vector{Float64}
+    f_max::Vector{Float64}
+    best_soln::Union{Any, Nothing}
+    best_fitness::Float64
+end
+
 function main()
     # statistics
     f_mean::Vector{Float64} = []
