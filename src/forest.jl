@@ -33,8 +33,9 @@ function runModel(features, labels, bitmask)
     
     accuracies = []
 
+    rng = MersenneTwister(123)
     for _ in 1:30
-        train_indices = randperm(MersenneTwister(123), n)[1:Int64(floor(0.7*n))]
+        train_indices = randperm(rng, n)[1:Int64(floor(0.7*n))]
         test_indices = setdiff(1:n, train_indices)
 
         acc = RF(labels[train_indices], features[train_indices, findall(bitmask)], labels[test_indices], features[test_indices, findall(bitmask)])
