@@ -40,6 +40,16 @@ function get_or_evaluate!(lookup_table::LookupTable, chromosome::Vector{Bool}, f
         return fitness
     end
 end
+function get_or_evaluate!(lookup_table::LookupTable, chromosome::BitVector, fitness_fn::Function)
+    key = join(map(x -> x ? "1" : "0", chromosome))
+    if haskey(lookup_table.table, key)
+        return lookup_table.table[key]
+    else
+        fitness = fitness_fn(chromosome)
+        lookup_table.table[key] = fitness
+        return fitness
+    end
+end
 
 """
     save(lut::LookupTable, path::String)

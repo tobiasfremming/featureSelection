@@ -1,4 +1,6 @@
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DecisionTree = "7806a523-6efd-50cb-b5f6-3fa6f1930dbb"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 MultiObjectiveAlgorithms = "0327d340-17cd-11ea-3e99-2fd5d98cecda"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"

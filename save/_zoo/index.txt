@@ -1,0 +1,7 @@
+Dataset: zoo
+Description: successful run of zoo dataset
+Population Size: 50
+Number of Parents: 70
+Number of Generations: 200
+Mutation Rate: 0.027906976744186046
+Crossover Rate: 0.8

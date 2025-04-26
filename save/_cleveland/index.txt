@@ -1,0 +1,7 @@
+Dataset: cleveland
+Description: successful run of the cleveland dataset
+Population Size: 50
+Number of Parents: 70
+Number of Generations: 200
+Mutation Rate: 0.02891566265060241
+Crossover Rate: 0.8
