@@ -7,6 +7,7 @@ using Dates
 using FileIO
 using DataFrames
 using CSV
+using Base.Threads
 
 include("lookup_table.jl")
 include("GA/selection.jl")
@@ -51,9 +52,9 @@ atexit(() -> LookupTableModule.save(TABLE, "../luts/_$(DATASET).pickle"))
 # hyperparameters
 POP_SIZE::Int = 20
 NUM_PARENTS::Int = 30
-NUM_ITERATIONS::Int = 500
+NUM_ITERATIONS::Int = 100
 GENE_SIZE::Int = size(DF[1], 2)
-MUTATION_RATE::Float64 = 2/(GENE_SIZE + NUM_PARENTS) * 1.0
+MUTATION_RATE::Float64 = 2/(GENE_SIZE + NUM_PARENTS) * 1.4
 CROSSOVER_RATE::Float64 = 0.7
 ELITISM_RATIO::Float64 = 0.05
 
@@ -63,7 +64,19 @@ ZERO_KEY::String = string(join(Vector{Int}([0 for _ in 1:GENE_SIZE])))
 
 # evaluate the fitness
 function evaluate_fitness(population::Vector)::Vector{Float64}
-    return map(x -> string(join(Vector{Int}(x))) == ZERO_KEY ? ZERO_VALUE : LookupTableModule.get_or_evaluate!(TABLE, x, FF), population)
+    fitnesses::Vector{Float64} = Vector{Float64}(undef, length(population))
+
+    Threads.@threads for i in 1:length(population)
+        key = string(join(Vector{Int}(population[i])))
+        if key == ZERO_KEY
+            println("NOOOO")
+            fitnesses[i] = ZERO_VALUE
+        else
+            fitnesses[i] = LookupTableModule.get_or_evaluate!(TABLE, population[i], FF)
+        end
+    end
+
+    return fitnesses
 end
 
 mutable struct RunStatistics
@@ -121,6 +134,9 @@ function main()
             best_result = population[argmin(population_fitness)]
             best_fitness = minimum(population_fitness)
         end
+
+        # store the LUT
+        LookupTableModule.save(TABLE, "../luts/_$(DATASET).pickle")
     end
 
     best_bitstring::String = string(join(Vector{Int}(best_result)))
@@ -163,5 +179,5 @@ open("$(SAVEPATH)/index.txt", "w") do f
     write(f, "Number of Parents: $(NUM_PARENTS)\n")
     write(f, "Number of Generations: $(NUM_ITERATIONS)\n")
     write(f, "Mutation Rate: $(MUTATION_RATE)\n")
-    write(f, "Crossover Rate: $(CROSSOVER_RATE)")    
+    write(f, "Crossover Rate: $(CROSSOVER_RATE)")
 end

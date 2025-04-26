@@ -35,11 +35,20 @@ function uniformCrossover!(population::Vector{BitVector}, prob::Float64)
         if rand() < prob
             parent1 = population[2*i]
             parent2 = population[2*i-1]
+
+            old_parent1 = deepcopy(parent1)
+            old_parent2 = deepcopy(parent2)
+
             for i in 1:length(population[1])
                 if rand() > 0.5
                     temp = parent1[i]
                     parent1[i] = parent2[i]
                     parent2[i] = temp
+
+                    if count(parent1) == 0 || count(parent2) == 0
+                        parent1[i] .= old_parent1
+                        parent2[i] .= old_parent2
+                    end
                 end
             end     
         end

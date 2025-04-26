@@ -1,0 +1,7 @@
+Dataset: letter
+Description: successful run of letters
+Population Size: 20
+Number of Parents: 30
+Number of Generations: 100
+Mutation Rate: 0.0608695652173913
+Crossover Rate: 0.7

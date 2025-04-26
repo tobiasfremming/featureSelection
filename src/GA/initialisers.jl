@@ -11,8 +11,14 @@ function initialisePopulation(nsize::Int, gene_size::Int)::Vector{BitVector}
     """
     population::Vector{BitVector} = Vector{BitVector}(undef, nsize)
     for i in 1:nsize
-        person = bitrand(gene_size)
-        population[i] = person
+        while true
+            person = bitrand(gene_size)
+            
+            if count(person) != 0
+                population[i] = person
+                break
+            end
+        end
     end
 
     return population
