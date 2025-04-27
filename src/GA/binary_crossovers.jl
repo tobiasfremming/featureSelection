@@ -46,8 +46,8 @@ function uniformCrossover!(population::Vector{BitVector}, prob::Float64)
                     parent2[i] = temp
 
                     if count(parent1) == 0 || count(parent2) == 0
-                        parent1[i] .= old_parent1
-                        parent2[i] .= old_parent2
+                        parent1 .= old_parent1
+                        parent2 .= old_parent2
                     end
                 end
             end     

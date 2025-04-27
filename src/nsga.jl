@@ -9,7 +9,13 @@ using CSV
 include("lookup_table.jl")
 using .LookupTableModule
 
-include("GA/mutate.jl")
+include("GA/binary_mutators.jl")
+include("GA/binary_crossovers.jl")
+include("GA/initialisers.jl")
+
+using .BinaryCrossovers
+using .BinaryMutators
+using .Initialisers
 
 DATASET::String = ARGS[1]
 ERROR_TABLE::LookupTableModule.LookupTable = LookupTableModule.load("../luts/$(DATASET)_err.pickle")
@@ -21,8 +27,8 @@ if !isdir(SAVEPATH)
     mkpath("$(SAVEPATH)/runs")
 end
 
-POP_SIZE = 200
-NUM_PARENTS = 200
+POP_SIZE = 50
+NUM_PARENTS = 100
 NUM_ITERATIONS = 100
 GENE_SIZE = length(collect(keys(ERROR_TABLE))[1])
 MUTATION_RATE::Float64 = 2/(GENE_SIZE + NUM_PARENTS) * 1.0
@@ -54,52 +60,6 @@ function hypervolume(pareto_front, reference_point)
     end
 
     return hv
-end
-
-function onePointCrossover!(population::Vector{BitVector}, prob::Float64)
-    """
-    Applies standard one-point crossover within contiguous pairs of children. Splits two genotypes into two partitions and matches opposite partitions for every (contiguous) pair of children.
-    Operations are in-place.
-
-    Parameters:
-        population::Vector{BitVector} the Vector of children to crossover. Should have an even length.
-        prob::Float64 the probability of applying the crossover.
-    """
-    for i in 1:Int32((floor(length(population)/2)))
-        parent1 = population[2*i]
-        parent2 = population[2*i-1]
-        if rand() < prob
-            crossover_point = Int32(floor(rand()*(length(population[1]) - 1)) + 1)
-            for i in 1:crossover_point
-                temp = parent1[i]
-                parent1[i] = parent2[i]
-                parent2[i] = temp
-            end
-        end
-    end
-end
-
-function uniformCrossover!(population::Vector{BitVector}, prob::Float64)
-    """
-    Applies uniform crossover within contiguous pairs of children.
-    
-    Parameters:
-        population::Vector{BitVector} the Vector of children to crossover. Should have an even length.
-        prob::Float64 the probability of applying the crossover.
-    """
-    for i in 1:Int32((floor(length(population)/2)))
-        if rand() < prob
-            parent1 = population[2*i]
-            parent2 = population[2*i-1]
-            for i in 1:length(population[1])
-                if rand() > 0.5
-                    temp = parent1[i]
-                    parent1[i] = parent2[i]
-                    parent2[i] = temp
-                end
-            end     
-        end
-    end
 end
 
 function get_population_ranks(fitness_one::Vector{Float64}, fitness_two::Vector{Float64})
@@ -175,22 +135,6 @@ function get_population_crowdings(fitness_one::Vector{Float64}, fitness_two::Vec
     end
 
     return crowdings
-end
-
-function initialisePopulation(nsize::Int64)::Vector{BitVector}
-    """
-    Creates a random and uniform population
-
-    Parameters:
-        nsize::Int64 the size of the population
-    """
-    population::Vector{BitVector} = Vector{BitVector}(undef, nsize)
-    for i in 1:nsize
-        person = bitrand(GENE_SIZE)
-        population[i] = person
-    end
-
-    return population
 end
 
 function evaluate_fitness_one(population)::Vector{Float64}
@@ -270,12 +214,13 @@ mutable struct Statistics
     best_front_percent::Float64
     best_hyperv::Float64
     best_hyperv_front::Vector{BitVector}
+    time_to_best_soln::Int
 end
 
 
 function main(suppress_plots=false, blind_search=false)
 
-    population::Vector{BitVector} = initialisePopulation(POP_SIZE)
+    population::Vector{BitVector} = Initialisers.initialisePopulation(POP_SIZE, GENE_SIZE)
 
     # reference values to be used when we are not doing a blind search
     if (!blind_search)
@@ -303,12 +248,13 @@ function main(suppress_plots=false, blind_search=false)
     percent_dom::Vector{Float64} = []
     hyperv::Vector{Float64} = []
     best_soln::Vector{BitVector} = []
+    time_to_best_soln::Int = 0
 
     for i in 1:NUM_ITERATIONS
         parents::Vector = parentSelectionNSGA(population, NUM_PARENTS)
         children::Vector{BitVector} = deepcopy(parents)
-        uniformCrossover!(children, CROSSOVER_RATE)
-        Mutations.applyMutationStandard!(children, MUTATION_RATE)
+        BinaryCrossovers.uniformCrossover!(children, CROSSOVER_RATE)
+        BinaryMutators.applyMutationStandard!(children, MUTATION_RATE)
 
         population = survivorSelectionNSGA(parents, children)
 
@@ -347,6 +293,9 @@ function main(suppress_plots=false, blind_search=false)
 
         if !blind_search
             push!(percent_front, length(setdiff(total_pareto_front, population))/length(total_pareto_front)*100)
+            if hyperv[end] == reference_hypervolume && time_to_best_soln == 0
+                time_to_best_soln = i
+            end
         else
             push!(percent_front, -1)
         end
@@ -386,7 +335,7 @@ function main(suppress_plots=false, blind_search=false)
 
     return Statistics(
         f2_mean, f2_std, f2_min, f2_max, f1_mean, f1_std, f1_min, f1_max, percent_front, percent_dom, hyperv,
-        maximum(percent_front), maximum(hyperv), best_soln
+        maximum(percent_front), maximum(hyperv), best_soln, time_to_best_soln
     )
 end
 
@@ -396,6 +345,7 @@ NUM_TRIALS = 20
 best_hypervs = []
 best_front_percents = []
 best_solns = []
+best_soln_time = []
 for i in 1:NUM_TRIALS
     results::Statistics = main(i != NUM_TRIALS, false)
     df = DataFrame(
@@ -416,11 +366,13 @@ for i in 1:NUM_TRIALS
     push!(best_hypervs, results.best_hyperv)
     push!(best_front_percents, results.best_front_percent)
     push!(best_solns, results.best_hyperv_front)
+    push!(best_soln_time, results.time_to_best_soln)
 end
 df = DataFrame(
     trial = collect(1:NUM_TRIALS),
     best_hyperv = best_hypervs,
-    best_front_percents = best_front_percents
+    best_front_percents = best_front_percents,
+    time_to_optimum = best_soln_time
 )
 CSV.write("$(SAVEPATH)/aggregates.csv", df)
 open("$(SAVEPATH)/best_soln.txt", "w") do f

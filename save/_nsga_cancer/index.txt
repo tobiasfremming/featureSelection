@@ -1,0 +1,8 @@
+Dataset: cancer
+Description: cancer dataset with revised metrics and params
+Population Size: 50
+Number of Parents: 100
+Number of Generations: 100
+Number of Trials: 20
+Mutation Rate: 0.01834862385321101
+Crossover Rate: 0.7
