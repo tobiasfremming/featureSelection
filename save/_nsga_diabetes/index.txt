@@ -1,0 +1,8 @@
+Dataset: diabetes
+Description: adjusted run for diabetes
+Population Size: 50
+Number of Parents: 100
+Number of Generations: 100
+Number of Trials: 20
+Mutation Rate: 0.018518518518518517
+Crossover Rate: 0.7

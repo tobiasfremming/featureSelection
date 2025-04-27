@@ -1,0 +1,8 @@
+Dataset: heart
+Description: revised run of heart
+Population Size: 50
+Number of Parents: 100
+Number of Generations: 100
+Number of Trials: 20
+Mutation Rate: 0.018018018018018018
+Crossover Rate: 0.7
