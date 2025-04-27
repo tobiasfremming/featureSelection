@@ -105,8 +105,6 @@ function binary_aco(fitness; num_features=50, num_ants=50, iterations=100, α=1.
 end
 
 
-
-
 num_features = 1000
 
 K = 5   # Number of interactions per feature (higher = harder)
