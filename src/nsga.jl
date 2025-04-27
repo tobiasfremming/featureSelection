@@ -270,10 +270,16 @@ function main(suppress_plots=false, blind_search=false)
         print("F1 $(round(mean(new_fitness_one), digits=3)) [$(round(minimum(new_fitness_one), digits=3)) - $(round(maximum(new_fitness_one), digits=3))] [+/- $(round(std(new_fitness_one), digits=3))] | ")
         print("F2 $(round(mean(new_fitness_two), digits=3)) [$(round(minimum(new_fitness_two), digits=3)) - $(round(maximum(new_fitness_two), digits=3))] [+/- $(round(std(new_fitness_two), digits=3))] | ")
         print("G Div $(round(mean([sum(x .!= y) for x in population, y in population]), digits=3)) | ")
-        print("% of Dominated Solns $(round(length(setdiff(population, total_pareto_front))/length(population)*100, digits=3)) | ")
+
         if !blind_search
-            print("% of Front $(round(length(setdiff(total_pareto_front, population))/length(total_pareto_front)*100, digits=3)) | ")
+            fitness_pairs = collect(zip(new_fitness_one, new_fitness_two))
+            num_in_pareto_front = count(x -> x in total_pareto_front_values, fitness_pairs)
+            print("% of Dominated Solns $(round(100 - num_in_pareto_front/length(population)*100, digits=3)) | ")
+
+            num_front_covered = count(x -> x in fitness_pairs, total_pareto_front_values)
+            print("% of Front $(round(num_front_covered/length(total_pareto_front_values)*100, digits=3)) | ")
             print("Hypervolume $(round(hypervolume(pareto_front_values, hypervolume_ref_point), digits=3))/$(reference_hypervolume)")
+
         else
             print("Hypervolume $(round(hypervolume(pareto_front_values, hypervolume_ref_point), digits=3))")
         end
@@ -293,7 +299,8 @@ function main(suppress_plots=false, blind_search=false)
 
         if !blind_search
             push!(percent_front, length(setdiff(total_pareto_front, population))/length(total_pareto_front)*100)
-            if hyperv[end] == reference_hypervolume && time_to_best_soln == 0
+            if num_front_covered == length(total_pareto_front_values) && time_to_best_soln == 0
+                @info "Converged to Optimal Pareto Front"
                 time_to_best_soln = i
             end
         else
