@@ -13,8 +13,14 @@ cd training
 python [file]
 ```
 
-### SGA
+### NSGA
 ```sh
 cd src
-julia --project=. sga.jl [dataset-name] # dataset name is heart, diabetes, cancer or wine
+julia --project=. nsga.jl [dataset-name] # dataset name is heart, diabetes, cancer or wine
+```
+
+### Task 6
+```sh
+cd src
+julia --project=. sga_blind.jl [dataset-name] # dataset name is cleveland, zoo or letter
 ```
