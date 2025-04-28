@@ -1,7 +1,11 @@
 [deps]
+ColorSchemes = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DecisionTree = "7806a523-6efd-50cb-b5f6-3fa6f1930dbb"
+Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 MultiObjectiveAlgorithms = "0327d340-17cd-11ea-3e99-2fd5d98cecda"
+MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"

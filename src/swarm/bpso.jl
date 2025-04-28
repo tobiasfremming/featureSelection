@@ -5,9 +5,10 @@ using Random, Statistics, Printf, ThreadsX, Dates
 #  LOOK-UP TABLE (heart / cancer / diabetes)  ──────────────────────
 # ──────────────────────────────────────────────────────────────────
 using CSV, DataFrames                        # add these two
+include("visualization.jl")
+using .PSOPlots  
 
 const DATASET = get(ENV, "DATASET", "cancer")   # choose set via ENV var
-
 # File is in   src/Visualization_and_SGA/Lookup_tables/
 const LUT_PATH = joinpath(@__DIR__, "..","..", "Visualization_and_SGA",
                           "Lookup_tables", "$(DATASET)_fitness_lut.csv")
@@ -122,7 +123,7 @@ function get_best(topo::RingTopology, swarm, i)
     return best
 end
 
-# Swarm initialisation                                                    #
+# Swarm initialisation                                                    
 
 
 function init_swarm(rng::AbstractRNG, m::Int, d::Int, v_max::Float64)
@@ -137,7 +138,7 @@ function init_swarm(rng::AbstractRNG, m::Int, d::Int, v_max::Float64)
 end
 
 
-# 5.  Binary PSO (supports NBPSO + INBPSO)                                    
+# Binary PSO (supports NBPSO + INBPSO)                                    
 
 """
     binary_pso(fitness; features, particles=50, iters=200, rng,              
@@ -146,62 +147,84 @@ end
                T_factor = 5.0) → NamedTuple
 
 `topology`  : :global | :ring
-Returns     : (best, best_fitness, history)
+Returns     : 
+    - `best_bits`  : the best bitstring found
+    - `best_fit`   : the fitness of that bitstring
+    - `best_hist`  : the best fitness curve
+    - `bit_hist`   : the global-best bits (1 row per iter)
+    - `fit_hist`   : the full pop fitness (1 row per iter)
+    - `div_hist`   : diversity (Hamming mean) per iter
+    - `A_hist`     : INBPSO A schedule
+    - `v_hist`     : mean |v| per iter
 """
-function binary_pso(;                                  
-        features::Int, particles::Int = 50, iters::Int = 200,
-        rng::AbstractRNG = Random.default_rng(),
-        v_max::Float64   = 2.0, w_start=0.9, w_end=0.4, c1=2.2, c2=2.5,
-        topology::Symbol = :ring, # :global | :ring
-        stagn_limit::Int = 15, swarm_stagn_limit::Int = 40,
-        T_factor::Real   = 5.0)
 
-    # prepare objects 
-    swarm = init_swarm(rng, particles, features, v_max)
+function binary_pso(;
+        features::Int,
+        particles::Int      = 50,
+        iters::Int          = 200,
+        rng::AbstractRNG    = Random.default_rng(),
+        v_max::Float64      = 2.0,
+        w_start             = 0.9,
+        w_end               = 0.4,
+        c1::Float64         = 2.2,
+        c2::Float64         = 2.5,
+        topology::Symbol    = :ring,  # :global | :ring
+        stagn_limit::Int    = 15,
+        T_factor::Real      = 5.0)
 
-    topo = topology === :global ? GlobalTopology(particles) : RingTopology(particles)
+    # ---------------- initialisation -----------------------------------------
+    swarm   = init_swarm(rng, particles, features, v_max)
+    topo    = topology === :global ? GlobalTopology(particles) : RingTopology(particles)
 
-    best_hist = Float64[]     # record best each iter
-    
+    # ~~ histories we are going to log ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    best_hist  =  Vector{Float64}(undef, iters)          # best fitness curve
+    bit_hist   =  falses(iters, features)                # global-best bits
+    fit_hist   =  Vector{Vector{Float64}}(undef, iters)  # full pop fitness
+    div_hist   =  Vector{Float64}(undef, iters)          # diversity
+    A_hist     =  Vector{Float64}(undef, iters)          # INBPSO A schedule
+    v_hist     =  Vector{Float64}(undef, iters)          # mean |v| per iter
 
-    # swarm‑level stagnation counter
     last_best  = maximum(p.fP for p in swarm)
     F_swarm    = 0
     T          = T_factor * features
-
-    # per‑particle stagnation counters
     stagn_cnt  = zeros(Int, particles)
+    w_schedule = range(w_start, w_end; length = iters)
 
-    w_schedule = range(w_start, w_end; length=iters)
+    # ---------------- helper for visualization--------------------------------------------------
+    hamming_mean(pop) = begin
+        # mean pair-wise Hamming distance (O(n²) but n=50~60)
+        d_sum = 0
+        cnt   = 0
+        @inbounds for i in 1:length(pop)-1, j in i+1:length(pop)
+            # d_sum += count(!=, pop[i].X, pop[j].X)
+            d_sum += sum(pop[i].X .!= pop[j].X)
+            cnt   += 1
+        end
+        d_sum / (cnt * features)
+    end
 
-    # -------------------------------------------------------------------------
+    # ---------------- main loop ----------------------------------------------
     for iter in 1:iters
         w = w_schedule[iter]
 
         Threads.@threads for i in 1:particles
-            p = swarm[i]
+            p       = swarm[i]
+            best_nb = get_best(topo, swarm, i)
+            G       = swarm[best_nb].P        # neighbourhood best
 
-            # --- choose neighbourhood best -----------------------------------
-            best_idx = get_best(topo, swarm, i)
-            G = swarm[best_idx].P
-
-            # --- velocity + position update ----------------------------------
+            # velocity + position update
             @inbounds for j in 1:features
                 r1, r2 = rand(rng), rand(rng)
-                vij = w*p.V[j] +               # inertia
-                      c1*r1*(p.P[j]-p.X[j]) +  # cognitive
-                      c2*r2*(G[j]  -p.X[j])    # social
+                vij = w*p.V[j] +
+                    c1*r1*(p.P[j]-p.X[j]) +
+                    c2*r2*(G[j]  -p.X[j])
                 vij = clamp(vij, -v_max, v_max)
                 p.V[j] = vij
 
-                if rand(rng) < Sprime(vij)     # NBPSO flip rule
-                    p.X[j] ⊻= true
-                end
-                # if rand(rng) < sigmoid(vij)                
-                #     p.X[j] ⊻= true
-                # end
+                rand(rng) < Sprime(vij) && (p.X[j] ⊻= true)
             end
-            # fitness / personal best 
+
+            # personal best update
             f_curr = fitness(p.X)
             if f_curr < p.fP
                 p.P  = copy(p.X)
@@ -211,57 +234,84 @@ function binary_pso(;
                 stagn_cnt[i] += 1
             end
 
-            # kick stagnant particles
-            if stagn_cnt[i] ≥ stagn_limit
+            # kick stagnant particle
+            stagn_cnt[i] ≥ stagn_limit && begin
                 p.V .= rand(rng, features) .* 2v_max .- v_max
-                idx = rand(rng, 1:features)
-                p.X[idx] ⊻= true
+                p.X[rand(rng, 1:features)] ⊻= true
                 stagn_cnt[i] = 0
             end
-        end  # threads loop
+        end # thread
 
-        # get global best
+        # ----- global statistics for this iteration --------------------------
         (gbest_idx, gbest_f) = best_index(swarm)
-        push!(best_hist, gbest_f)
+        gbits                = swarm[gbest_idx].P
 
-        # swarm stagnation & INBPSO mutation 
+        best_hist[iter] = gbest_f
+        bit_hist[iter, :] .= gbits
+        fit_hist[iter]   = [p.fP for p in swarm]
+        div_hist[iter]   = hamming_mean(swarm)
+        v_hist[iter]     = mean(abs.(vcat((p.V for p in swarm)...)))
+
+        # INBPSO mutation probability
         if gbest_f == last_best
             F_swarm += 1
         else
             F_swarm  = 0
             last_best = gbest_f
         end
+        A = 1 - exp(-F_swarm / T)               # eq. 11 (k=1)
+        A_hist[iter] = A
 
-        A = A_mutation(F_swarm, T)
-        
         if A > 0
-            @inbounds for p in swarm
-                for j in 1:features
-                    if rand(rng) < A / features
-                        p.X[j] ⊻= true
-                    end
-                end
+            @inbounds for p in swarm, j in 1:features
+                rand(rng) < A / features && (p.X[j] ⊻= true)
             end
         end
 
-        # print progress 
-        @printf("iter %4d  |  best = %.6f  |  A = %.3f\n", iter, gbest_f, A)
-    end  # main loop
+        @printf("iter %4d | best = %.6f | A = %.3f\n", iter, gbest_f, A)
+    end # iterations
 
-    #gbest_f, gbest_idx = findmax(swarm, by = s -> s.fP)
     (gbest_idx, gbest_f) = best_index(swarm)
-    gbest = copy(swarm[gbest_idx].P)
 
-    return (best = gbest, fitness = gbest_f, history = best_hist)
+    return ( best_bits = copy(swarm[gbest_idx].P),
+            best_fit  = gbest_f,
+            best_hist = best_hist,
+            bit_hist  = bit_hist,
+            fit_hist  = fit_hist,
+            div_hist  = div_hist,
+            A_hist    = A_hist,
+            v_hist    = v_hist )
 end
 
 
 
 
+
 println("[", Dates.format(now(), "HH:MM:ss"), "]  demo run…\n")
-result = binary_pso(features = GENE_SIZE, particles = 60, iters = 400,
+
+
+    
+
+result = binary_pso(features = GENE_SIZE,
+                    particles = 60,
+                    iters = 400,
                     topology = :ring,
                     rng = MersenneTwister(2025))
 
-println("\nBest fitness = ", result.fitness)
-println("Best solution = ", result.best)
+using .PSOPlots                                   # the module we built
+convergence_plot(result.best_hist;
+                 true_value = minimum(values(LUT_FITNESS)))
+
+heatmap_plot(result.bit_hist)
+freq_plot(result.bit_hist; top = GENE_SIZE)
+plot_diversity(result.div_hist)
+plot_mutation(result.A_hist)
+PSOPlots.velocity_histogram(result.v_hist)
+mat = reduce(vcat, permutedims.(result.fit_hist)) 
+PSOPlots.fitness_dist_plot(mat)                # needs StatsPlots
+# PSOPlots.parallel_coords(result.best_bits)
+# PSOPlots.flight_animation(result.bit_hist; fps = 15, file = "swarm_flight.gif")
+
+
+
+
