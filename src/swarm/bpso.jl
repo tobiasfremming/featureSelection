@@ -1,6 +1,43 @@
 
 
 using Random, Statistics, Printf, ThreadsX, Dates
+# ──────────────────────────────────────────────────────────────────
+#  LOOK-UP TABLE (heart / cancer / diabetes)  ──────────────────────
+# ──────────────────────────────────────────────────────────────────
+using CSV, DataFrames                        # add these two
+
+const DATASET = get(ENV, "DATASET", "cancer")   # choose set via ENV var
+
+# File is in   src/Visualization_and_SGA/Lookup_tables/
+const LUT_PATH = joinpath(@__DIR__, "..","..", "Visualization_and_SGA",
+                          "Lookup_tables", "$(DATASET)_fitness_lut.csv")
+
+@assert isfile(LUT_PATH) "Lookup-table not found:\n$LUT_PATH"
+
+const lut_df = CSV.read(LUT_PATH, DataFrame;
+                        types = Dict(1=>String, 2=>Float64, 3=>Float64,
+                                     4=>Float64, 5=>Float64, 6=>Float64))
+
+# number of bits = width of the *string* in column 1
+const GENE_SIZE = length(string(lut_df.key[end]))
+
+# turn the Int / String keys into BitVector so we can index with the
+# particle bit-string directly
+lut_df.key = lpad.(string.(lut_df.key), GENE_SIZE, '0')
+lut_df.key = [BitVector(c=='1' for c in s) for s in lut_df.key]
+
+# one dictionary: BitVector → fitness (column f16 is what SGA minimises)
+const LUT_FITNESS = Dict(lut_df.key .=> lut_df.f16)
+
+# If you also need the “err” column later you can build
+# const LUT_ERROR = Dict(lut_df.key .=> lut_df.err)
+# ──────────────────────────────────────────────────────────────────
+#  FITNESS   (SGA minimised ⇒ PSO must MAXIMISE −value)  ───────────
+# ──────────────────────────────────────────────────────────────────
+@inline function fitness(bits::BitVector)::Float64
+    return LUT_FITNESS[bits]      # negate because PSO maximises
+end
+# ──────────────────────────────────────────────────────────────────
 
 
 """
@@ -14,7 +51,7 @@ function best_index(swarm)
     best_fit = swarm[1].fP
     @inbounds for i in 2:length(swarm)
         fi = swarm[i].fP
-        if fi > best_fit
+        if fi < best_fit
             best_fit = fi
             best_idx = i
         end
@@ -41,7 +78,7 @@ Replace this with your own evaluator.
 """
 
 
-function fitness(bits::BitVector)
+function fitness3(bits::BitVector)
    
     ones = 0
     zeros = 0
@@ -114,9 +151,9 @@ Returns     : (best, best_fitness, history)
 function binary_pso(;                                  
         features::Int, particles::Int = 50, iters::Int = 200,
         rng::AbstractRNG = Random.default_rng(),
-        v_max::Float64   = 6.0, w_start=0.9, w_end=0.4, c1=2.2, c2=2.5,
-        topology::Symbol = :global,
-        stagn_limit::Int = 20, swarm_stagn_limit::Int = 40,
+        v_max::Float64   = 2.0, w_start=0.9, w_end=0.4, c1=2.2, c2=2.5,
+        topology::Symbol = :ring, # :global | :ring
+        stagn_limit::Int = 15, swarm_stagn_limit::Int = 40,
         T_factor::Real   = 5.0)
 
     # prepare objects 
@@ -125,6 +162,7 @@ function binary_pso(;
     topo = topology === :global ? GlobalTopology(particles) : RingTopology(particles)
 
     best_hist = Float64[]     # record best each iter
+    
 
     # swarm‑level stagnation counter
     last_best  = maximum(p.fP for p in swarm)
@@ -159,11 +197,13 @@ function binary_pso(;
                 if rand(rng) < Sprime(vij)     # NBPSO flip rule
                     p.X[j] ⊻= true
                 end
+                # if rand(rng) < sigmoid(vij)                
+                #     p.X[j] ⊻= true
+                # end
             end
-
             # fitness / personal best 
             f_curr = fitness(p.X)
-            if f_curr > p.fP
+            if f_curr < p.fP
                 p.P  = copy(p.X)
                 p.fP = f_curr
                 stagn_cnt[i] = 0
@@ -193,6 +233,7 @@ function binary_pso(;
         end
 
         A = A_mutation(F_swarm, T)
+        
         if A > 0
             @inbounds for p in swarm
                 for j in 1:features
@@ -218,8 +259,8 @@ end
 
 
 println("[", Dates.format(now(), "HH:MM:ss"), "]  demo run…\n")
-result = binary_pso(features = 100, particles = 60, iters = 400,
-                    topology = :global,
+result = binary_pso(features = GENE_SIZE, particles = 60, iters = 400,
+                    topology = :ring,
                     rng = MersenneTwister(2025))
 
 println("\nBest fitness = ", result.fitness)

@@ -5,6 +5,42 @@ using Random, Statistics
 #     return sum(bitstring)
 # end
 
+using CSV, DataFrames                        # add these two
+
+const DATASET = get(ENV, "DATASET", "diabetes")   # choose set via ENV var
+
+# File is in   src/Visualization_and_SGA/Lookup_tables/
+const LUT_PATH = joinpath(@__DIR__, "..","..", "Visualization_and_SGA",
+                          "Lookup_tables", "$(DATASET)_fitness_lut.csv")
+
+@assert isfile(LUT_PATH) "Lookup-table not found:\n$LUT_PATH"
+
+const lut_df = CSV.read(LUT_PATH, DataFrame;
+                        types = Dict(1=>String, 2=>Float64, 3=>Float64,
+                                     4=>Float64, 5=>Float64, 6=>Float64))
+
+# number of bits = width of the *string* in column 1
+const GENE_SIZE = length(string(lut_df.key[end]))
+
+# turn the Int / String keys into BitVector so we can index with the
+# particle bit-string directly
+lut_df.key = lpad.(string.(lut_df.key), GENE_SIZE, '0')
+lut_df.key = [BitVector(c=='1' for c in s) for s in lut_df.key]
+
+# one dictionary: BitVector → fitness (column f16 is what SGA minimises)
+const LUT_FITNESS = Dict(lut_df.key .=> lut_df.f16)
+
+# If you also need the “err” column later you can build
+# const LUT_ERROR = Dict(lut_df.key .=> lut_df.err)
+# ──────────────────────────────────────────────────────────────────
+#  FITNESS   (SGA minimised ⇒ PSO must MAXIMISE −value)  ───────────
+# ──────────────────────────────────────────────────────────────────
+@inline function fitness(bits::Vector{Int})::Float64
+    return - LUT_FITNESS[bits]      # negate because PSO maximises
+end
+# ──────────────────────────────────────────────────────────────────
+
+
 struct NKLandscape
     N::Int
     K::Int
@@ -44,7 +80,7 @@ function fitness2(nk::NKLandscape, bitstring::Vector{Int})
     return fitness_sum / nk.N  # Average contribution
 end
 
-function fitness(nk::NKLandscape, bitstring::Vector{Int})
+function fitness2(nk::NKLandscape, bitstring::Vector{Int})
     ones = 0
     zeros = 0
     for i in 1:length(bitstring)
@@ -73,7 +109,7 @@ function binary_aco(fitness; num_features=50, num_ants=50, iterations=100, α=1.
             # Ant constructs a solution based on pheromone
             subset = [rand() < (pheromone[j]^α) / ((pheromone[j]^α) + (1 - pheromone[j])^α) ? 1 : 0 for j in 1:num_features]
 
-            f = fitness(nk, subset)
+            f = fitness(subset)
             push!(ant_solutions, subset)
             push!(ant_fitnesses, f)
 
@@ -105,7 +141,7 @@ function binary_aco(fitness; num_features=50, num_ants=50, iterations=100, α=1.
 end
 
 
-num_features = 1000
+num_features = GENE_SIZE
 
 K = 5   # Number of interactions per feature (higher = harder)
 
