@@ -63,11 +63,11 @@ function hypervolume(pareto_front, reference_point)
 end
 
 function get_population_ranks(fitness_one::Vector{Float64}, fitness_two::Vector{Float64})
-    N = length(fitness_one)
+    n = length(fitness_one)
     population_ranks = fill(1, N)
 
-    for i in 1:N
-        for j in 1:N
+    for i in 1:n
+        for j in 1:n
             if i != j
                 dominates_i = (fitness_one[i] <= fitness_one[j] && fitness_two[i] <= fitness_two[j]) && 
                                 (fitness_one[i] < fitness_one[j] || fitness_two[i] < fitness_two[j])
