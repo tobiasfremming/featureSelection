@@ -189,6 +189,7 @@ function binary_pso(;
     T          = T_factor * features
     stagn_cnt  = zeros(Int, particles)
     w_schedule = range(w_start, w_end; length = iters)
+    swarm_hist = Vector{BitMatrix}(undef, iters) 
 
     # ---------------- helper for visualization--------------------------------------------------
     hamming_mean(pop) = begin
@@ -252,6 +253,7 @@ function binary_pso(;
         div_hist[iter]   = hamming_mean(swarm)
         v_hist[iter]     = mean(abs.(vcat((p.V for p in swarm)...)))
 
+        swarm_hist[iter] = BitMatrix(hcat((p.X for p in swarm)...)')
         # INBPSO mutation probability
         if gbest_f == last_best
             F_swarm += 1
@@ -272,6 +274,7 @@ function binary_pso(;
     end # iterations
 
     (gbest_idx, gbest_f) = best_index(swarm)
+    
 
     return ( best_bits = copy(swarm[gbest_idx].P),
             best_fit  = gbest_f,
@@ -280,7 +283,9 @@ function binary_pso(;
             fit_hist  = fit_hist,
             div_hist  = div_hist,
             A_hist    = A_hist,
-            v_hist    = v_hist )
+            v_hist    = v_hist,
+            swarm_hist = swarm_hist
+            )
 end
 
 
@@ -304,7 +309,7 @@ using .PSOPlots                                   # the module we built
 PSOPlots.convergence_plot(result.best_hist;
                  true_value = minimum(values(LUT_FITNESS)))
 
-PSOPlots.heatmap_plot(result.bit_hist).
+PSOPlots.heatmap_plot(result.bit_hist)
 PSOPlots.freq_plot(result.bit_hist; top = GENE_SIZE)
 PSOPlots.plot_diversity(result.div_hist)
 PSOPlots.plot_mutation(result.A_hist)
@@ -312,8 +317,9 @@ PSOPlots.velocity_histogram(result.v_hist)
 mat = reduce(vcat, permutedims.(result.fit_hist)) 
 PSOPlots.fitness_dist_plot(mat)                # needs StatsPlots
 PSOPlots.parallel_coords(result.best_bits)
-PSOPlots.flight_animation(result.bit_hist; fps = 15, file = "swarm_flight.gif")
+# PSOPlots.flight_animation(result.bit_hist; fps = 15, file = "swarm_flight.gif")
 
+bitlog = reduce(vcat, result.swarm_hist)   # (iters*particles × features)
 
-
+PSOPlots.flight_animation(bitlog; fps = 15, file = "swarm_flight.gif")
 
