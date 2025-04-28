@@ -290,27 +290,29 @@ end
 println("[", Dates.format(now(), "HH:MM:ss"), "]  demo run…\n")
 
 
-    
+
 
 result = binary_pso(features = GENE_SIZE,
                     particles = 60,
                     iters = 400,
                     topology = :ring,
                     rng = MersenneTwister(2025))
+println("Best fitness: ", result.best_fit)
+println("Best bitstring: ", result.best_bits)
 
 using .PSOPlots                                   # the module we built
-convergence_plot(result.best_hist;
+PSOPlots.convergence_plot(result.best_hist;
                  true_value = minimum(values(LUT_FITNESS)))
 
-heatmap_plot(result.bit_hist)
-freq_plot(result.bit_hist; top = GENE_SIZE)
-plot_diversity(result.div_hist)
-plot_mutation(result.A_hist)
+PSOPlots.heatmap_plot(result.bit_hist).
+PSOPlots.freq_plot(result.bit_hist; top = GENE_SIZE)
+PSOPlots.plot_diversity(result.div_hist)
+PSOPlots.plot_mutation(result.A_hist)
 PSOPlots.velocity_histogram(result.v_hist)
 mat = reduce(vcat, permutedims.(result.fit_hist)) 
 PSOPlots.fitness_dist_plot(mat)                # needs StatsPlots
-# PSOPlots.parallel_coords(result.best_bits)
-# PSOPlots.flight_animation(result.bit_hist; fps = 15, file = "swarm_flight.gif")
+PSOPlots.parallel_coords(result.best_bits)
+PSOPlots.flight_animation(result.bit_hist; fps = 15, file = "swarm_flight.gif")
 
 
 
